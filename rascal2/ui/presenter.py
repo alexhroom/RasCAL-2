@@ -31,4 +31,5 @@ class MainWindowPresenter:
 
     def run(self):
         """Run the optimisation."""
-        self.view.terminal_widget.executeCommand()
+        self.view.terminal_widget.addVars({'controls': self.model.controls, 'project': self.model.project})
+        self.view.terminal_widget.executeCommand("RAT.run(project, controls)")
