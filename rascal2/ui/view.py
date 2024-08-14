@@ -1,6 +1,7 @@
 from PyQt6 import QtCore, QtGui, QtWidgets
 
 from rascal2.config import path_for
+from rascal2.widgets import ConsoleWidget
 
 from .presenter import MainWindowPresenter
 
@@ -24,7 +25,7 @@ class MainWindowView(QtWidgets.QMainWindow):
         self.mdi = QtWidgets.QMdiArea()
         # TODO replace the widgets below
         self.plotting_widget = QtWidgets.QWidget()
-        self.terminal_widget = QtWidgets.QWidget()
+        self.terminal_widget = ConsoleWidget()
         self.controls_widget = QtWidgets.QWidget()
         self.project_widget = QtWidgets.QWidget()
 

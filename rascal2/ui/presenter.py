@@ -28,3 +28,7 @@ class MainWindowPresenter:
         self.model.createProject(name, save_path)
         # TODO if the view's central widget is the startup one then setup MDI else reset the widgets.
         self.view.setupMDI()
+
+    def run(self):
+        """Run the optimisation."""
+        self.view.terminal_widget.executeCommand()
