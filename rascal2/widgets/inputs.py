@@ -68,7 +68,7 @@ class ValidatedInputWidget(QtWidgets.QWidget):
                     if hasattr(item, attr):
                         self.editor.setMaximum(getattr(item, attr))
             # if no default exists, field_info.default is PydanticUndefined not a nonexistent attribute
-            if isinstance(field_info.default, (int, float)) and field_info.default > 0:
+            if isinstance(field_info.default, (int, float)) and 0 < field_info.default < float("inf"):
                 # set default decimals to order of magnitude of default value
                 self.editor.setDecimals(-floor(log10(abs(field_info.default))))
 
@@ -103,6 +103,8 @@ class AdaptiveDoubleSpinBox(QtWidgets.QDoubleSpinBox):
             The string displayed on the spinbox.
 
         """
+        if value == float("inf"):
+            return "inf"
         return f"{round(value, self.decimals()):.{self.decimals()}g}"
 
     def validate(self, input, pos) -> tuple[QtGui.QValidator.State, str, int]:
@@ -123,6 +125,8 @@ class AdaptiveDoubleSpinBox(QtWidgets.QDoubleSpinBox):
             The validation state of the input, the input string, and position.
 
         """
+        if input == "inf":
+            return (QtGui.QValidator.State.Acceptable, input, pos)
         if "e" in input:
             try:
                 self.setDecimals(-int(input.split("e")[-1]))
