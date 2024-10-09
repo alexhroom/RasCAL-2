@@ -181,6 +181,8 @@ class AdaptiveDoubleSpinBox(QtWidgets.QDoubleSpinBox):
             The string displayed on the spinbox.
 
         """
+        if value == float("inf"):
+            return "inf"
         return f"{round(value, self.decimals()):.{self.decimals()}g}"
 
     def validate(self, input_text, pos) -> tuple[QtGui.QValidator.State, str, int]:
@@ -201,6 +203,8 @@ class AdaptiveDoubleSpinBox(QtWidgets.QDoubleSpinBox):
             The validation state of the input, the input string, and position.
 
         """
+        if input_text == "inf":
+            return (QtGui.QValidator.State.Acceptable, input, pos)
         if "e" in input_text:
             try:
                 self.setDecimals(-int(input_text.split("e")[-1]))

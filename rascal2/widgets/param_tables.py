@@ -1,8 +1,11 @@
 """Add to project.py once PR #39 merged..."""
 
 from pydantic import ValidationError
+from pydantic.fields import FieldInfo
 from PyQt6 import QtCore, QtWidgets
 from RATapi import ClassList
+
+from rascal2.widgets.delegates import ValidatedInputDelegate
 
 
 class ClassListModel(QtCore.QAbstractTableModel):
@@ -22,11 +25,18 @@ class ClassListModel(QtCore.QAbstractTableModel):
         self.classlist = classlist
         self.item_type = classlist._class_handle
         self.headers = list(self.item_type.model_fields)
+        self.edit_mode = False
 
-    def rowCount(self, parent) -> int:
+    def flags(self, index):
+        flags = super().flags(index)
+        if self.edit_mode or index.column() == self.headers.index("fit"):
+            flags |= QtCore.Qt.ItemFlag.ItemIsEditable
+        return flags
+
+    def rowCount(self, parent=None) -> int:
         return len(self.classlist)
 
-    def columnCount(self, parent) -> int:
+    def columnCount(self, parent=None) -> int:
         return len(self.headers)
 
     def data(self, index, role):
@@ -61,7 +71,7 @@ class ClassListModel(QtCore.QAbstractTableModel):
 
 
 class ProjectFieldDisplayWidget(QtWidgets.QWidget):
-    """Widget to show a project ClassList field in display mode.
+    """Widget to show a project ClassList in display mode.
 
     Parameters
     ----------
@@ -76,7 +86,6 @@ class ProjectFieldDisplayWidget(QtWidgets.QWidget):
         super().__init__(parent)
         self.view = parent
         self.table = QtWidgets.QTableView(parent)
-        self.table.horizontalHeader()
         self.field = field
 
         layout = QtWidgets.QVBoxLayout()
@@ -86,12 +95,48 @@ class ProjectFieldDisplayWidget(QtWidgets.QWidget):
     def update_model(self):
         """Update the table model to synchronise with the project field."""
         classlist = getattr(self.view.presenter.model.project, self.field)
-        model = ClassListModel(classlist, self)
+        self.model = ClassListModel(classlist, self)
 
-        self.table.setModel(model)
+        self.table.setModel(self.model)
+        fit_col = self.model.headers.index("fit")
+        self.table.setItemDelegateForColumn(
+            fit_col, ValidatedInputDelegate(FieldInfo.from_annotation(bool), self.table)
+        )
+        for i in range(0, self.model.rowCount()):
+            self.table.openPersistentEditor(self.model.createIndex(i, fit_col))
 
 
 class ProjectFieldEditWidget(QtWidgets.QWidget):
-    """Widget to show a project ClassList in edit mode."""
+    """Widget to show and edit a project ClassList in edit mode.
 
-    pass
+    Parameters
+    ----------
+    field : str
+        The Project field to display.
+    view : MainWindowView
+        The View for the GUI.
+
+    """
+
+    def __init__(self, field: str, parent):
+        super().__init__(parent)
+        self.view = parent
+        self.table = QtWidgets.QTableView(parent)
+        self.field = field
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(self.table)
+        self.setLayout(layout)
+
+    def update_model(self):
+        """Update the table model to synchronise with the project field."""
+        classlist = getattr(self.view.presenter.model.project, self.field)
+        self.model = ClassListModel(classlist, self)
+
+        self.table.setModel(self.model)
+        fit_col = self.model.headers.index("fit")
+        self.table.setItemDelegateForColumn(
+            fit_col, ValidatedInputDelegate(FieldInfo.from_annotation(bool), self.table)
+        )
+        for i in range(0, self.model.rowCount()):
+            self.table.openPersistentEditor(self.model.createIndex(i, fit_col))
