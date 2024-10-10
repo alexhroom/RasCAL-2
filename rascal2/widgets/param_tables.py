@@ -149,18 +149,12 @@ class ProjectFieldWidget(QtWidgets.QWidget):
         self.model.edit_mode = False
         self.add_button.setHidden(True)
         self.update_model()
+
+        fit_col = self.model.headers.index("fit")
         for i in range(0, self.model.rowCount()):
-            fit_col = self.model.headers.index("fit")
             for j in range(0, self.model.columnCount()):
                 if j != fit_col:
                     self.table.closePersistentEditor(self.model.createIndex(i, j))
-
-    def save(self):
-        try:
-            # change to use undo stack
-            setattr(self.view.presenter.model.project, self.field, self.model.classlist)
-        except ValidationError as err:
-            self.error = err
 
 
 class ExperimentalParamsWidget(QtWidgets.QWidget):
@@ -179,6 +173,11 @@ class ExperimentalParamsWidget(QtWidgets.QWidget):
             layout.addWidget(header)
             layout.addWidget(self.tables[field])
 
+
+        # TEST BUTTON PLEASE REMOVE
+        button = QtWidgets.QPushButton()
+        button.pressed.connect(self.edit)
+        layout.addWidget(button)
         self.setLayout(layout)
 
     def update_model(self):
