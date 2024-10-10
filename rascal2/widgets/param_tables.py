@@ -4,8 +4,9 @@ from enum import Enum
 
 import RATapi
 from pydantic import ValidationError
-from PyQt6 import QtCore, QtWidgets
+from PyQt6 import QtCore, QtGui, QtWidgets
 
+from rascal2.config import path_for
 from rascal2.widgets.delegates import ValidatedInputDelegate
 
 
@@ -20,7 +21,6 @@ class ClassListModel(QtCore.QAbstractTableModel):
         The parent widget for the model.
 
     """
-
     def __init__(self, classlist: RATapi.ClassList, parent: QtWidgets.QWidget):
         super().__init__(parent)
         self.classlist = classlist
@@ -32,7 +32,7 @@ class ClassListModel(QtCore.QAbstractTableModel):
         if self.item_type is RATapi.models.Parameter:
             for i, item in enumerate(classlist):
                 if isinstance(item, RATapi.models.ProtectedParameter):
-                    self.protected_indices.append((i, 0))
+                    self.protected_indices.append((i, 1))
 
     def flags(self, index):
         flags = super().flags(index)
@@ -47,14 +47,19 @@ class ClassListModel(QtCore.QAbstractTableModel):
         return len(self.classlist)
 
     def columnCount(self, parent=None) -> int:
-        return len(self.headers)
+        return len(self.headers) + 1
 
     def data(self, index, role):
         if role == QtCore.Qt.ItemDataRole.DisplayRole:
             row = index.row()
             col = index.column()
-            param = self.headers[col]
+
+            if col == 0:
+                return ""
+
+            param = self.headers[col-1]
             data = getattr(self.classlist[row], param)
+            # pyqt can't manually coerce enums to strings...
             if isinstance(data, Enum):
                 return str(data)
             return data
@@ -63,22 +68,27 @@ class ClassListModel(QtCore.QAbstractTableModel):
         if role == QtCore.Qt.ItemDataRole.EditRole:
             row = index.row()
             col = index.column()
-            param = self.headers[col]
-
-            try:
-                setattr(self.classlist[row], param, value)
-            except ValidationError:
-                return False
-            return True
+            if col > 0:
+                param = self.headers[col-1]
+                try:
+                    setattr(self.classlist[row], param, value)
+                except ValidationError:
+                    return False
+                return True
 
     def headerData(self, section, orientation, role):
-        if orientation == QtCore.Qt.Orientation.Horizontal and role == QtCore.Qt.ItemDataRole.DisplayRole:
-            return self.headers[section]
+        if orientation == QtCore.Qt.Orientation.Horizontal and role == QtCore.Qt.ItemDataRole.DisplayRole and section != 0:
+                return self.headers[section-1]
         return None
 
     def append_item(self):
         """Append an item to the ClassList."""
         self.classlist.append(self.item_type())
+        self.endResetModel()
+
+    def delete_item(self, i):
+        """Delete an item in the ClassList."""
+        self.classlist.pop(i)
         self.endResetModel()
 
 
@@ -98,6 +108,7 @@ class ProjectFieldWidget(QtWidgets.QWidget):
         super().__init__(view)
         self.view = view
         self.table = QtWidgets.QTableView(view)
+        self.table.setSizePolicy(QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding))
         self.field = field
         self.model = None
         self.error = None
@@ -118,13 +129,17 @@ class ProjectFieldWidget(QtWidgets.QWidget):
         self.model = ClassListModel(classlist, self)
 
         self.table.setModel(self.model)
-        fit_col = self.model.headers.index("fit")
+        self.table.hideColumn(0)
+        fit_col = self.model.headers.index("fit") + 1
         for i, header in enumerate(self.model.headers):
             self.table.setItemDelegateForColumn(
-                i, ValidatedInputDelegate(self.model.item_type.model_fields[header], self.table)
+                i+1, ValidatedInputDelegate(self.model.item_type.model_fields[header], self.table)
             )
         for i in range(0, self.model.rowCount()):
             self.table.openPersistentEditor(self.model.createIndex(i, fit_col))
+
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
 
     def append_item(self):
         """Append an item to the model if the model exists."""
@@ -134,12 +149,30 @@ class ProjectFieldWidget(QtWidgets.QWidget):
         # call edit again to fix persistent editors
         self.edit()
 
+    def delete_item(self, index):
+        """Delete an item at the index if the model exists.
+
+        Parameters
+        ----------
+        index : int
+            The row to be deleted.
+
+        """
+        if self.model is not None:
+            self.model.delete_item(index)
+
+        # call edit again to fix persistent editors
+        self.edit()
+
     def edit(self):
         """Change the widget to be in edit mode."""
         self.model.edit_mode = True
         self.add_button.setHidden(False)
+        self.table.showColumn(0)
         for i in range(0, self.model.rowCount()):
             for j in range(0, self.model.columnCount()):
+                if j == 0:
+                    self.table.setIndexWidget(self.model.createIndex(i, j), self.make_delete_button(i))
                 if (i, j) not in self.model.protected_indices:
                     self.table.openPersistentEditor(self.model.createIndex(i, j))
 
@@ -152,18 +185,33 @@ class ProjectFieldWidget(QtWidgets.QWidget):
 
         fit_col = self.model.headers.index("fit")
         for i in range(0, self.model.rowCount()):
-            for j in range(0, self.model.columnCount()):
+            for j in range(1, self.model.columnCount()):
                 if j != fit_col:
                     self.table.closePersistentEditor(self.model.createIndex(i, j))
 
+    def make_delete_button(self, index):
+        """Make a button that deletes index `index` from the list."""
+        button = QtWidgets.QPushButton(icon=QtGui.QIcon(path_for("delete.png")))
+        button.resize(button.sizeHint().width(), button.sizeHint().width())
+        button.pressed.connect(lambda: self.delete_item(index))
 
-class ExperimentalParamsWidget(QtWidgets.QWidget):
-    """Widget for the 'experimental parameters' tab of the project window."""
+        return button
 
-    def __init__(self, view):
+class ProjectTabWidget(QtWidgets.QWidget):
+    """Widget that combines multiple ProjectFieldWidgets to create a tab of the project window.
+
+    Parameters
+    ----------
+    fields : list[str]
+        The fields to display in the tab.
+    view : MainWindowView
+        The parent view to this widget.
+
+    """
+    def __init__(self, fields: list[str], view):
         super().__init__(view)
-        self.fields = ["resolution_parameters", "scalefactors", "bulk_in", "bulk_out"]
-        headers = ["Resolution Parameters", "Scale Factors", "Bulk In", "Bulk Out"]
+        self.fields = fields
+        headers = [f.replace("_", " ").title() for f in self.fields]
         self.tables = {}
 
         layout = QtWidgets.QVBoxLayout()
@@ -173,12 +221,20 @@ class ExperimentalParamsWidget(QtWidgets.QWidget):
             layout.addWidget(header)
             layout.addWidget(self.tables[field])
 
+        scroll_area = QtWidgets.QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setLayout(layout)
 
         # TEST BUTTON PLEASE REMOVE
         button = QtWidgets.QPushButton()
         button.pressed.connect(self.edit)
         layout.addWidget(button)
         self.setLayout(layout)
+
+        widget_layout = QtWidgets.QVBoxLayout()
+        widget_layout.addWidget(scroll_area)
+        widget_layout.addWidget(button)
+        self.setLayout(widget_layout)
 
     def update_model(self):
         for table in self.tables.values():
