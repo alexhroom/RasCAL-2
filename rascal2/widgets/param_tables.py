@@ -1,9 +1,10 @@
 """Add to project.py once PR #39 merged..."""
 
+from enum import Enum
+
+import RATapi
 from pydantic import ValidationError
-from pydantic.fields import FieldInfo
 from PyQt6 import QtCore, QtWidgets
-from RATapi import ClassList
 
 from rascal2.widgets.delegates import ValidatedInputDelegate
 
@@ -20,16 +21,25 @@ class ClassListModel(QtCore.QAbstractTableModel):
 
     """
 
-    def __init__(self, classlist: ClassList, parent: QtWidgets.QWidget):
+    def __init__(self, classlist: RATapi.ClassList, parent: QtWidgets.QWidget):
         super().__init__(parent)
         self.classlist = classlist
         self.item_type = classlist._class_handle
         self.headers = list(self.item_type.model_fields)
         self.edit_mode = False
 
+        self.protected_indices = []
+        if self.item_type is RATapi.models.Parameter:
+            for i, item in enumerate(classlist):
+                if isinstance(item, RATapi.models.ProtectedParameter):
+                    self.protected_indices.append((i, 0))
+
     def flags(self, index):
         flags = super().flags(index)
-        if self.edit_mode or index.column() == self.headers.index("fit"):
+        if (self.edit_mode or index.column() == self.headers.index("fit")) and (
+            index.row(),
+            index.column(),
+        ) not in self.protected_indices:
             flags |= QtCore.Qt.ItemFlag.ItemIsEditable
         return flags
 
@@ -44,7 +54,10 @@ class ClassListModel(QtCore.QAbstractTableModel):
             row = index.row()
             col = index.column()
             param = self.headers[col]
-            return getattr(self.classlist[row], param)
+            data = getattr(self.classlist[row], param)
+            if isinstance(data, Enum):
+                return str(data)
+            return data
 
     def setData(self, index, value, role) -> bool:
         if role == QtCore.Qt.ItemDataRole.EditRole:
@@ -65,31 +78,38 @@ class ClassListModel(QtCore.QAbstractTableModel):
 
     def append_item(self):
         """Append an item to the ClassList."""
-        self.beginInsertRows()
         self.classlist.append(self.item_type())
-        self.endInsertRows()
+        self.endResetModel()
 
 
-class ProjectFieldDisplayWidget(QtWidgets.QWidget):
-    """Widget to show a project ClassList in display mode.
+class ProjectFieldWidget(QtWidgets.QWidget):
+    """Widget to show a project ClassList.
 
     Parameters
     ----------
     field : str
         The Project field to display.
     view : MainWindowView
-        The View for the GUI.
+        The parent View for the GUI.
 
     """
 
-    def __init__(self, field: str, parent):
-        super().__init__(parent)
-        self.view = parent
-        self.table = QtWidgets.QTableView(parent)
+    def __init__(self, field: str, view):
+        super().__init__(view)
+        self.view = view
+        self.table = QtWidgets.QTableView(view)
         self.field = field
+        self.model = None
+        self.error = None
 
         layout = QtWidgets.QVBoxLayout()
+        # change to icon: remember to mention that plus.png in the icons is wonky
+        self.add_button = QtWidgets.QPushButton("+")
+        self.add_button.setHidden(True)
+        self.add_button.pressed.connect(self.append_item)
+
         layout.addWidget(self.table)
+        layout.addWidget(self.add_button)
         self.setLayout(layout)
 
     def update_model(self):
@@ -99,44 +119,78 @@ class ProjectFieldDisplayWidget(QtWidgets.QWidget):
 
         self.table.setModel(self.model)
         fit_col = self.model.headers.index("fit")
-        self.table.setItemDelegateForColumn(
-            fit_col, ValidatedInputDelegate(FieldInfo.from_annotation(bool), self.table)
-        )
+        for i, header in enumerate(self.model.headers):
+            self.table.setItemDelegateForColumn(
+                i, ValidatedInputDelegate(self.model.item_type.model_fields[header], self.table)
+            )
         for i in range(0, self.model.rowCount()):
             self.table.openPersistentEditor(self.model.createIndex(i, fit_col))
 
+    def append_item(self):
+        """Append an item to the model if the model exists."""
+        if self.model is not None:
+            self.model.append_item()
 
-class ProjectFieldEditWidget(QtWidgets.QWidget):
-    """Widget to show and edit a project ClassList in edit mode.
+        # call edit again to fix persistent editors
+        self.edit()
 
-    Parameters
-    ----------
-    field : str
-        The Project field to display.
-    view : MainWindowView
-        The View for the GUI.
+    def edit(self):
+        """Change the widget to be in edit mode."""
+        self.model.edit_mode = True
+        self.add_button.setHidden(False)
+        for i in range(0, self.model.rowCount()):
+            for j in range(0, self.model.columnCount()):
+                if (i, j) not in self.model.protected_indices:
+                    self.table.openPersistentEditor(self.model.createIndex(i, j))
 
-    """
+    def display(self):
+        """Change the widget to be in display mode."""
+        self.error = None
+        self.model.edit_mode = False
+        self.add_button.setHidden(True)
+        self.update_model()
+        for i in range(0, self.model.rowCount()):
+            fit_col = self.model.headers.index("fit")
+            for j in range(0, self.model.columnCount()):
+                if j != fit_col:
+                    self.table.closePersistentEditor(self.model.createIndex(i, j))
 
-    def __init__(self, field: str, parent):
-        super().__init__(parent)
-        self.view = parent
-        self.table = QtWidgets.QTableView(parent)
-        self.field = field
+    def save(self):
+        try:
+            # change to use undo stack
+            setattr(self.view.presenter.model.project, self.field, self.model.classlist)
+        except ValidationError as err:
+            self.error = err
+
+
+class ExperimentalParamsWidget(QtWidgets.QWidget):
+    """Widget for the 'experimental parameters' tab of the project window."""
+
+    def __init__(self, view):
+        super().__init__(view)
+        self.fields = ["resolution_parameters", "scalefactors", "bulk_in", "bulk_out"]
+        headers = ["Resolution Parameters", "Scale Factors", "Bulk In", "Bulk Out"]
+        self.tables = {}
 
         layout = QtWidgets.QVBoxLayout()
-        layout.addWidget(self.table)
+        for field, header in zip(self.fields, headers):
+            header = QtWidgets.QLabel(header)
+            self.tables[field] = ProjectFieldWidget(field, view)
+            layout.addWidget(header)
+            layout.addWidget(self.tables[field])
+
         self.setLayout(layout)
 
     def update_model(self):
-        """Update the table model to synchronise with the project field."""
-        classlist = getattr(self.view.presenter.model.project, self.field)
-        self.model = ClassListModel(classlist, self)
+        for table in self.tables.values():
+            table.update_model()
 
-        self.table.setModel(self.model)
-        fit_col = self.model.headers.index("fit")
-        self.table.setItemDelegateForColumn(
-            fit_col, ValidatedInputDelegate(FieldInfo.from_annotation(bool), self.table)
-        )
-        for i in range(0, self.model.rowCount()):
-            self.table.openPersistentEditor(self.model.createIndex(i, fit_col))
+    def edit(self):
+        """Change the tables in the widget to be in edit mode."""
+        for field in self.fields:
+            self.tables[field].edit()
+
+    def display(self):
+        """Change the tables in the widget to be in display mode."""
+        for field in self.fields:
+            self.tables[field].display()
