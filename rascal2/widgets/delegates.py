@@ -16,6 +16,7 @@ class ValidatedInputDelegate(QtWidgets.QStyledItemDelegate):
 
     def createEditor(self, parent, option, index):
         widget = ValidatedInputWidget(self.field_info, parent)
+        widget.set_data(index.data(QtCore.Qt.ItemDataRole.DisplayRole))
 
         # without this signal, data isn't committed unless the user presses 'enter' on the cell
         widget.edited_signal.connect(lambda: self.table.commitData(widget))

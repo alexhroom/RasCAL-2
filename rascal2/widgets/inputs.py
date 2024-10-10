@@ -160,10 +160,21 @@ class EnumInputWidget(BaseInputWidget):
 class AdaptiveDoubleSpinBox(QtWidgets.QDoubleSpinBox):
     """A double spinbox which adapts to given numbers of decimals."""
 
+    MIN_DECIMALS = 2
+
     def __init__(self, parent=None):
         super().__init__(parent)
+
+        # default max and min are 99.99 and 0.0
+        self.setMaximum(float("inf"))
+        self.setMinimum(-float("inf"))
+
         self.setStepType(self.StepType.AdaptiveDecimalStepType)
         self.setKeyboardTracking(False)
+
+    def get_decimals(self):
+        """Get either the decimals of the value, or the minimum decimal value."""
+        return max(self.decimals(), self.MIN_DECIMALS)
 
     def textFromValue(self, value):
         """Set the display text for the spinbox from the value stored in the widget.
@@ -183,7 +194,18 @@ class AdaptiveDoubleSpinBox(QtWidgets.QDoubleSpinBox):
         """
         if value == float("inf"):
             return "inf"
-        return f"{round(value, self.decimals()):.{self.decimals()}g}"
+        if value == -float("inf"):
+            return "-inf"
+        return f"{round(value, self.get_decimals()):.{self.get_decimals()}g}"
+
+    def valueFromText(self, text: str) -> float:
+        """Set the underlying value of the spinbox from the text input."""
+        if text == "inf":
+            return float("inf")
+        if text == "-inf":
+            return -float("inf")
+        self.setDecimals(-floor(log10(abs(float(text)))))
+        return super().valueFromText(text)
 
     def validate(self, input_text, pos) -> tuple[QtGui.QValidator.State, str, int]:
         """Validate a string written into the spinbox.
@@ -203,11 +225,14 @@ class AdaptiveDoubleSpinBox(QtWidgets.QDoubleSpinBox):
             The validation state of the input, the input string, and position.
 
         """
-        if input_text == "inf":
-            return (QtGui.QValidator.State.Acceptable, input, pos)
-        if "e" in input_text:
+        if input_text in "inf" or input_text in "-inf":
+            if input_text in ["inf", "-inf"]:
+                return (QtGui.QValidator.State.Acceptable, input_text, pos)
+            else:
+                return (QtGui.QValidator.State.Intermediate, input_text, pos)
+        if "e" in input_text or "E" in input_text:
             try:
-                self.setDecimals(-int(input_text.split("e")[-1]))
+                self.setDecimals(max(-int(input_text.lower().split("e")[-1]), 0))
                 return (QtGui.QValidator.State.Acceptable, input_text, pos)
             except ValueError:
                 return (QtGui.QValidator.State.Intermediate, input_text, pos)
