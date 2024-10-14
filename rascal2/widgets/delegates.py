@@ -3,7 +3,7 @@
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 
-from rascal2.widgets.inputs import ValidatedInputWidget
+from rascal2.widgets.inputs import get_validated_input
 
 
 class ValidatedInputDelegate(QtWidgets.QStyledItemDelegate):
@@ -15,7 +15,7 @@ class ValidatedInputDelegate(QtWidgets.QStyledItemDelegate):
         self.field_info = field_info
 
     def createEditor(self, parent, option, index):
-        widget = ValidatedInputWidget(self.field_info, parent)
+        widget = get_validated_input(self.field_info, parent)
         widget.set_data(index.data(QtCore.Qt.ItemDataRole.DisplayRole))
 
         # without this signal, data isn't committed unless the user presses 'enter' on the cell

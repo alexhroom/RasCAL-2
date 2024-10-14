@@ -8,13 +8,15 @@ from pydantic.fields import FieldInfo
 from PyQt6 import QtCore, QtGui, QtWidgets
 
 
-def get_validated_input(field_info: FieldInfo) -> QtWidgets.QWidget:
+def get_validated_input(field_info: FieldInfo, parent = None) -> QtWidgets.QWidget:
     """Get a validated input widget from Pydantic field info.
 
     Parameters
     ----------
     field_info : FieldInfo
         The Pydantic field info for the field.
+    parent : QWidget or None, default None
+        The parent widget of this widget.
 
     Returns
     -------
@@ -31,9 +33,9 @@ def get_validated_input(field_info: FieldInfo) -> QtWidgets.QWidget:
 
     for input_type, widget in class_widgets.items():
         if issubclass(field_info.annotation, input_type):
-            return widget(field_info)
+            return widget(field_info, parent)
 
-    return BaseInputWidget(field_info)
+    return BaseInputWidget(field_info, parent)
 
 
 class BaseInputWidget(QtWidgets.QWidget):
@@ -125,7 +127,7 @@ class FloatInputWidget(BaseInputWidget):
                 if hasattr(item, attr):
                     editor.setMaximum(getattr(item, attr))
         # if no default exists, field_info.default is PydanticUndefined not a nonexistent attribute
-        if isinstance(field_info.default, (int, float)) and field_info.default > 0:
+        if isinstance(field_info.default, (int, float)) and 0 < field_info.default < float('inf'):
             # set default decimals to order of magnitude of default value
             editor.setDecimals(-floor(log10(abs(field_info.default))))
 

@@ -32,14 +32,11 @@ class ClassListModel(QtCore.QAbstractTableModel):
         if self.item_type is RATapi.models.Parameter:
             for i, item in enumerate(classlist):
                 if isinstance(item, RATapi.models.ProtectedParameter):
-                    self.protected_indices.append((i, 1))
+                    self.protected_indices.append(i)
 
     def flags(self, index):
         flags = super().flags(index)
-        if (self.edit_mode or index.column() == self.headers.index("fit")) and (
-            index.row(),
-            index.column(),
-        ) not in self.protected_indices:
+        if not (self.edit_mode or (index.row() not in self.protected_indices and index.column() == 1)):
             flags |= QtCore.Qt.ItemFlag.ItemIsEditable
         return flags
 
@@ -103,12 +100,13 @@ class ProjectFieldWidget(QtWidgets.QWidget):
         The parent View for the GUI.
 
     """
-
     def __init__(self, field: str, view):
         super().__init__(view)
         self.view = view
         self.table = QtWidgets.QTableView(view)
-        self.table.setSizePolicy(QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding))
+        self.table.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.MinimumExpanding,
+            QtWidgets.QSizePolicy.Policy.MinimumExpanding)
         self.field = field
         self.model = None
         self.error = None
@@ -135,11 +133,14 @@ class ProjectFieldWidget(QtWidgets.QWidget):
             self.table.setItemDelegateForColumn(
                 i+1, ValidatedInputDelegate(self.model.item_type.model_fields[header], self.table)
             )
+
         for i in range(0, self.model.rowCount()):
-            self.table.openPersistentEditor(self.model.createIndex(i, fit_col))
+            for j in range(2, self.model.columnCount()):
+                self.table.openPersistentEditor(self.model.createIndex(i, j))
 
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Stretch)
 
     def append_item(self):
         """Append an item to the model if the model exists."""
@@ -170,10 +171,13 @@ class ProjectFieldWidget(QtWidgets.QWidget):
         self.add_button.setHidden(False)
         self.table.showColumn(0)
         for i in range(0, self.model.rowCount()):
-            for j in range(0, self.model.columnCount()):
-                if j == 0:
-                    self.table.setIndexWidget(self.model.createIndex(i, j), self.make_delete_button(i))
-                if (i, j) not in self.model.protected_indices:
+            for j in range(1, self.model.columnCount()):
+                # skip name and delete button for protected indices
+                if i in self.model.protected_indices:
+                    continue
+                if j == 1:
+                    self.table.setIndexWidget(self.model.createIndex(i, 0), self.make_delete_button(i))
+                else:
                     self.table.openPersistentEditor(self.model.createIndex(i, j))
 
     def display(self):
@@ -181,13 +185,11 @@ class ProjectFieldWidget(QtWidgets.QWidget):
         self.error = None
         self.model.edit_mode = False
         self.add_button.setHidden(True)
+        self.table.hideColumn(0)
         self.update_model()
 
-        fit_col = self.model.headers.index("fit")
         for i in range(0, self.model.rowCount()):
-            for j in range(1, self.model.columnCount()):
-                if j != fit_col:
-                    self.table.closePersistentEditor(self.model.createIndex(i, j))
+            self.table.closePersistentEditor(self.model.createIndex(i, 1))
 
     def make_delete_button(self, index):
         """Make a button that deletes index `index` from the list."""
@@ -222,18 +224,21 @@ class ProjectTabWidget(QtWidgets.QWidget):
             layout.addWidget(self.tables[field])
 
         scroll_area = QtWidgets.QScrollArea()
+        # one widget must be given, not a layout,
+        # or scrolling won't work properly!
+        tab_widget = QtWidgets.QFrame()
+        tab_widget.setLayout(layout)
+        scroll_area.setWidget(tab_widget)
         scroll_area.setWidgetResizable(True)
-        scroll_area.setLayout(layout)
 
         # TEST BUTTON PLEASE REMOVE
         button = QtWidgets.QPushButton()
         button.pressed.connect(self.edit)
-        layout.addWidget(button)
-        self.setLayout(layout)
 
         widget_layout = QtWidgets.QVBoxLayout()
         widget_layout.addWidget(scroll_area)
         widget_layout.addWidget(button)
+
         self.setLayout(widget_layout)
 
     def update_model(self):
