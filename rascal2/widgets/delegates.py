@@ -84,5 +84,4 @@ class ValueSpinBoxDelegate(QtWidgets.QStyledItemDelegate):
         elif data < min_val:
             editor.setValue(min_val)
         else:
-            editor.setStyleSheet("")
             model.setData(index, data, QtCore.Qt.ItemDataRole.EditRole)

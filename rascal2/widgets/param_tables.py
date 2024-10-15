@@ -188,7 +188,7 @@ class ProjectFieldWidget(QtWidgets.QWidget):
         for i in range(0, self.model.rowCount()):
             if i not in self.model.protected_indices:
                 self.table.setIndexWidget(self.model.createIndex(i, 0), self.make_delete_button(i))
-                self.table.openPersistentEditor(self.model.createIndex(i, 0))
+                self.table.openPersistentEditor(self.model.createIndex(i, 1))
 
     def display(self):
         """Change the widget to be in display mode."""
@@ -225,6 +225,18 @@ class ParameterFieldWidget(ProjectFieldWidget):
             for j in range(2, self.model.columnCount()):
                 self.table.openPersistentEditor(self.model.createIndex(i, j))
 
+    def update_model(self):
+        super().update_model()
+        procedure = self.view.presenter.model.controls.procedure
+        is_bayesian = procedure in ["ns", "dream"]
+        bayesian_columns = ["prior_type", "mu", "sigma"]
+        for item in bayesian_columns:
+            index = self.model.headers.index(item)
+            if is_bayesian:
+                self.table.showColumn(index + 1)
+            else:
+                self.table.hideColumn(index + 1)
+
 
 class ProjectTabWidget(QtWidgets.QWidget):
     """Widget that combines multiple ProjectFieldWidgets to create a tab of the project window.
@@ -240,6 +252,7 @@ class ProjectTabWidget(QtWidgets.QWidget):
 
     def __init__(self, fields: list[str], view):
         super().__init__(view)
+        self.view = view
         self.fields = fields
         headers = [f.replace("_", " ").title() for f in self.fields]
         self.tables = {}
