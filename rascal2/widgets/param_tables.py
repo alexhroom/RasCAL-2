@@ -7,11 +7,11 @@ from pydantic import ValidationError
 from PyQt6 import QtCore, QtGui, QtWidgets
 
 from rascal2.config import path_for
-from rascal2.widgets.delegates import ValidatedInputDelegate
+from rascal2.widgets.delegates import ValidatedInputDelegate, ValueSpinBoxDelegate
 
 
 class ClassListModel(QtCore.QAbstractTableModel):
-    """Qt table model for a project ClassList field.
+    """Table model for a project ClassList field.
 
     Parameters
     ----------
@@ -21,6 +21,7 @@ class ClassListModel(QtCore.QAbstractTableModel):
         The parent widget for the model.
 
     """
+
     def __init__(self, classlist: RATapi.ClassList, parent: QtWidgets.QWidget):
         super().__init__(parent)
         self.classlist = classlist
@@ -36,8 +37,15 @@ class ClassListModel(QtCore.QAbstractTableModel):
 
     def flags(self, index):
         flags = super().flags(index)
-        if not (self.edit_mode or (index.row() not in self.protected_indices and index.column() == 1)):
+        if (
+            self.item_type is RATapi.models.Parameter
+            and self.classlist[index.row()].prior_type != "gaussian"
+            and self.headers[index.column() - 1] in ["mu", "sigma"]
+        ):
+            return QtCore.Qt.ItemFlag.NoItemFlags
+        if not (self.edit_mode and index.row() in self.protected_indices and index.column() == 1):
             flags |= QtCore.Qt.ItemFlag.ItemIsEditable
+
         return flags
 
     def rowCount(self, parent=None) -> int:
@@ -54,7 +62,7 @@ class ClassListModel(QtCore.QAbstractTableModel):
             if col == 0:
                 return ""
 
-            param = self.headers[col-1]
+            param = self.headers[col - 1]
             data = getattr(self.classlist[row], param)
             # pyqt can't manually coerce enums to strings...
             if isinstance(data, Enum):
@@ -66,7 +74,7 @@ class ClassListModel(QtCore.QAbstractTableModel):
             row = index.row()
             col = index.column()
             if col > 0:
-                param = self.headers[col-1]
+                param = self.headers[col - 1]
                 try:
                     setattr(self.classlist[row], param, value)
                 except ValidationError:
@@ -74,8 +82,12 @@ class ClassListModel(QtCore.QAbstractTableModel):
                 return True
 
     def headerData(self, section, orientation, role):
-        if orientation == QtCore.Qt.Orientation.Horizontal and role == QtCore.Qt.ItemDataRole.DisplayRole and section != 0:
-                return self.headers[section-1]
+        if (
+            orientation == QtCore.Qt.Orientation.Horizontal
+            and role == QtCore.Qt.ItemDataRole.DisplayRole
+            and section != 0
+        ):
+            return self.headers[section - 1]
         return None
 
     def append_item(self):
@@ -100,13 +112,14 @@ class ProjectFieldWidget(QtWidgets.QWidget):
         The parent View for the GUI.
 
     """
+
     def __init__(self, field: str, view):
         super().__init__(view)
         self.view = view
         self.table = QtWidgets.QTableView(view)
         self.table.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.MinimumExpanding,
-            QtWidgets.QSizePolicy.Policy.MinimumExpanding)
+            QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding
+        )
         self.field = field
         self.model = None
         self.error = None
@@ -128,19 +141,20 @@ class ProjectFieldWidget(QtWidgets.QWidget):
 
         self.table.setModel(self.model)
         self.table.hideColumn(0)
-        fit_col = self.model.headers.index("fit") + 1
-        for i, header in enumerate(self.model.headers):
-            self.table.setItemDelegateForColumn(
-                i+1, ValidatedInputDelegate(self.model.item_type.model_fields[header], self.table)
-            )
-
-        for i in range(0, self.model.rowCount()):
-            for j in range(2, self.model.columnCount()):
-                self.table.openPersistentEditor(self.model.createIndex(i, j))
-
+        self.set_item_delegates()
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Stretch)
+
+    def set_item_delegates(self):
+        """Set item delegates and open persistent editors for the table."""
+        for i, header in enumerate(self.model.headers):
+            self.table.setItemDelegateForColumn(
+                i + 1, ValidatedInputDelegate(self.model.item_type.model_fields[header], self.table)
+            )
+        for i in range(0, self.model.rowCount()):
+            for j in range(2, self.model.columnCount()):
+                self.table.openPersistentEditor(self.model.createIndex(i, j))
 
     def append_item(self):
         """Append an item to the model if the model exists."""
@@ -170,15 +184,11 @@ class ProjectFieldWidget(QtWidgets.QWidget):
         self.model.edit_mode = True
         self.add_button.setHidden(False)
         self.table.showColumn(0)
+        self.set_item_delegates()
         for i in range(0, self.model.rowCount()):
-            for j in range(1, self.model.columnCount()):
-                # skip name and delete button for protected indices
-                if i in self.model.protected_indices:
-                    continue
-                if j == 1:
-                    self.table.setIndexWidget(self.model.createIndex(i, 0), self.make_delete_button(i))
-                else:
-                    self.table.openPersistentEditor(self.model.createIndex(i, j))
+            if i not in self.model.protected_indices:
+                self.table.setIndexWidget(self.model.createIndex(i, 0), self.make_delete_button(i))
+                self.table.openPersistentEditor(self.model.createIndex(i, 0))
 
     def display(self):
         """Change the widget to be in display mode."""
@@ -199,6 +209,23 @@ class ProjectFieldWidget(QtWidgets.QWidget):
 
         return button
 
+
+class ParameterFieldWidget(ProjectFieldWidget):
+    """Subclass of field widgets for parameters."""
+
+    def set_item_delegates(self):
+        for i, header in enumerate(self.model.headers):
+            if header in ["min", "value", "max"]:
+                self.table.setItemDelegateForColumn(i + 1, ValueSpinBoxDelegate(header, self.table))
+            else:
+                self.table.setItemDelegateForColumn(
+                    i + 1, ValidatedInputDelegate(self.model.item_type.model_fields[header], self.table)
+                )
+        for i in range(0, self.model.rowCount()):
+            for j in range(2, self.model.columnCount()):
+                self.table.openPersistentEditor(self.model.createIndex(i, j))
+
+
 class ProjectTabWidget(QtWidgets.QWidget):
     """Widget that combines multiple ProjectFieldWidgets to create a tab of the project window.
 
@@ -210,6 +237,7 @@ class ProjectTabWidget(QtWidgets.QWidget):
         The parent view to this widget.
 
     """
+
     def __init__(self, fields: list[str], view):
         super().__init__(view)
         self.fields = fields
@@ -219,7 +247,10 @@ class ProjectTabWidget(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout()
         for field, header in zip(self.fields, headers):
             header = QtWidgets.QLabel(header)
-            self.tables[field] = ProjectFieldWidget(field, view)
+            if field in RATapi.project.parameter_class_lists:
+                self.tables[field] = ParameterFieldWidget(field, view)
+            else:
+                self.tables[field] = ProjectFieldWidget(field, view)
             layout.addWidget(header)
             layout.addWidget(self.tables[field])
 
