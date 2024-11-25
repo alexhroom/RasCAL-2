@@ -8,7 +8,7 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 from RATapi.utils.enums import Procedures
 
 from rascal2.config import path_for
-from rascal2.widgets.delegates import ParametersDelegate, ValidatedInputDelegate, ValueSpinBoxDelegate
+from rascal2.widgets.delegates import ProjectFieldDelegate, ValidatedInputDelegate, ValueSpinBoxDelegate
 
 
 class ClassListModel(QtCore.QAbstractTableModel):
@@ -80,6 +80,7 @@ class ClassListModel(QtCore.QAbstractTableModel):
                     return False
                 if not self.edit_mode:
                     self.parent.update_project()
+                self.dataChanged.emit(index, index)
                 return True
         return False
 
@@ -148,6 +149,10 @@ class ProjectFieldWidget(QtWidgets.QWidget):
 
     classlist_model = ClassListModel
 
+    # the model can change and disconnect, so we re-connect it
+    # to a signal here on each change
+    edited = QtCore.pyqtSignal() 
+
     def __init__(self, field: str, parent):
         super().__init__(parent)
         self.field = field
@@ -176,6 +181,8 @@ class ProjectFieldWidget(QtWidgets.QWidget):
         self.model = self.classlist_model(classlist, self)
 
         self.table.setModel(self.model)
+        self.model.dataChanged.connect(lambda: self.edited.emit())
+        self.model.modelReset.connect(lambda: self.edited.emit())
         self.table.hideColumn(0)
         self.set_item_delegates()
         header = self.table.horizontalHeader()
@@ -397,7 +404,7 @@ class LayerFieldWidget(ProjectFieldWidget):
                     i, ValidatedInputDelegate(self.model.item_type.model_fields[header], self.table)
                 )
             else:
-                self.table.setItemDelegateForColumn(i, ParametersDelegate(self.project_widget, self.table))
+                self.table.setItemDelegateForColumn(i, ProjectFieldDelegate(self.project_widget, "parameters", self.table))
 
     def set_absorption(self, absorption: bool):
         """Set whether the classlist uses AbsorptionLayers.

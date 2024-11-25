@@ -7,6 +7,7 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 from RATapi.utils.enums import Calculations, Geometries, LayerModels
 
 from rascal2.config import path_for
+from rascal2.widgets.project.lists import ContrastWidget
 from rascal2.widgets.project.models import LayerFieldWidget, ParameterFieldWidget, ProjectFieldWidget
 
 
@@ -37,7 +38,7 @@ class ProjectWidget(QtWidgets.QWidget):
             "Layers": ["layers"],
             "Data": [],
             "Backgrounds": [],
-            "Contrasts": [],
+            "Contrasts": ["contrasts"],
             "Domains": [],
         }
 
@@ -208,6 +209,10 @@ class ProjectWidget(QtWidgets.QWidget):
             lambda s: self.edit_tabs["Layers"].tables["layers"].set_absorption(s == QtCore.Qt.CheckState.Checked)
         )
 
+        for tab in ["Experimental Parameters", "Layers", "Backgrounds"]:
+            for table in self.edit_tabs[tab].tables.values():
+                table.edited.connect(lambda: self.edit_tabs["Contrasts"].tables["contrasts"].update_item_view())
+
         main_layout.addWidget(self.edit_project_tab)
 
         edit_project_widget.setLayout(main_layout)
@@ -362,6 +367,8 @@ class ProjectTabWidget(QtWidgets.QWidget):
                 self.tables[field] = ParameterFieldWidget(field, self)
             elif field == "layers":
                 self.tables[field] = LayerFieldWidget(field, self)
+            elif field == "contrasts":
+                self.tables[field] = ContrastWidget(field, self)
             else:
                 self.tables[field] = ProjectFieldWidget(field, self)
             layout.addWidget(self.tables[field])
@@ -401,7 +408,6 @@ class ProjectTabWidget(QtWidgets.QWidget):
         for field in RATapi.project.parameter_class_lists:
             if field in self.tables:
                 self.tables[field].handle_bayesian_columns(controls.procedure)
-
 
 def create_draft_project(project: RATapi.Project) -> dict:
     """Create a draft project (dictionary of project attributes) from a Project.
