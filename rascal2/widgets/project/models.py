@@ -157,6 +157,10 @@ class ProjectFieldWidget(QtWidgets.QWidget):
 
     classlist_model = ClassListModel
 
+    # the model can change and disconnect, so we re-connect it
+    # to a signal here on each change
+    edited = QtCore.pyqtSignal()
+
     def __init__(self, field: str, parent):
         super().__init__(parent)
         self.field = field
@@ -185,6 +189,8 @@ class ProjectFieldWidget(QtWidgets.QWidget):
         self.model = self.classlist_model(classlist, self)
 
         self.table.setModel(self.model)
+        self.model.dataChanged.connect(lambda: self.edited.emit())
+        self.model.modelReset.connect(lambda: self.edited.emit())
         self.table.hideColumn(0)
         self.set_item_delegates()
         header = self.table.horizontalHeader()
@@ -427,7 +433,7 @@ class LayerFieldWidget(ProjectFieldWidget):
             else:
                 blank_option = self.model.headers[i - 1] == "hydration"
                 self.table.setItemDelegateForColumn(
-                    i, delegates.ParametersDelegate(self.project_widget, self.table, blank_option)
+                    i, delegates.ParametersDelegate(self.project_widget, "parameters", self.table, blank_option)
                 )
 
     def set_absorption(self, absorption: bool):

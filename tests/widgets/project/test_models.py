@@ -363,12 +363,12 @@ def test_layer_widget_delegates(init_class):
 
     expected_delegates = {
         "name": delegates.ValidatedInputDelegate,
-        "thickness": delegates.ParametersDelegate,
-        "SLD": delegates.ParametersDelegate,
-        "SLD_real": delegates.ParametersDelegate,
-        "SLD_imaginary": delegates.ParametersDelegate,
-        "roughness": delegates.ParametersDelegate,
-        "hydration": delegates.ParametersDelegate,
+        "thickness": delegates.ProjectFieldDelegate,
+        "SLD": delegates.ProjectFieldDelegate,
+        "SLD_real": delegates.ProjectFieldDelegate,
+        "SLD_imaginary": delegates.ProjectFieldDelegate,
+        "roughness": delegates.ProjectFieldDelegate,
+        "hydration": delegates.ProjectFieldDelegate,
         "hydrate_with": delegates.ValidatedInputDelegate,
     }
 

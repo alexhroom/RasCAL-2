@@ -113,11 +113,12 @@ class ValueSpinBoxDelegate(QtWidgets.QStyledItemDelegate):
         model.setData(index, data, QtCore.Qt.ItemDataRole.EditRole)
 
 
-class ParametersDelegate(QtWidgets.QStyledItemDelegate):
+class ProjectFieldDelegate(QtWidgets.QStyledItemDelegate):
     """Item delegate to choose from existing draft project parameters."""
 
-    def __init__(self, project_widget, parent, blank_option: bool = False):
+    def __init__(self, project_widget, field, parent, blank_option: bool = False):
         super().__init__(parent)
+        self.field = field
         self.project_widget = project_widget
         self.blank_option = blank_option
 

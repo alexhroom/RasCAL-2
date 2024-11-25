@@ -7,6 +7,7 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 from RATapi.utils.enums import Calculations, Geometries, LayerModels
 
 from rascal2.config import path_for
+from rascal2.widgets.project.lists import ContrastWidget
 from rascal2.widgets.project.models import (
     CustomFileWidget,
     DomainContrastWidget,
@@ -45,7 +46,7 @@ class ProjectWidget(QtWidgets.QWidget):
             "Backgrounds": [],
             "Domains": ["domain_ratios", "domain_contrasts"],
             "Custom Files": ["custom_files"],
-            "Contrasts": [],
+            "Contrasts": ["contrasts"],
         }
 
         self.view_tabs = {}
@@ -214,6 +215,10 @@ class ProjectWidget(QtWidgets.QWidget):
         self.edit_absorption_checkbox.checkStateChanged.connect(
             lambda s: self.edit_tabs["Layers"].tables["layers"].set_absorption(s == QtCore.Qt.CheckState.Checked)
         )
+
+        for tab in ["Experimental Parameters", "Layers", "Backgrounds"]:
+            for table in self.edit_tabs[tab].tables.values():
+                table.edited.connect(lambda: self.edit_tabs["Contrasts"].tables["contrasts"].update_item_view())
 
         main_layout.addWidget(self.edit_project_tab)
 
@@ -386,6 +391,8 @@ class ProjectTabWidget(QtWidgets.QWidget):
                 self.tables[field] = DomainContrastWidget(field, self)
             elif field == "custom_files":
                 self.tables[field] = CustomFileWidget(field, self)
+            elif field == "contrasts":
+                self.tables[field] = ContrastWidget(field, self)
             else:
                 self.tables[field] = ProjectFieldWidget(field, self)
             layout.addWidget(self.tables[field])
