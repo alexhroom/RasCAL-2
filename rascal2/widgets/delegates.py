@@ -131,6 +131,12 @@ class ProjectFieldDelegate(QtWidgets.QStyledItemDelegate):
         widget.addItems(names)
         widget.setCurrentText(index.data(QtCore.Qt.ItemDataRole.DisplayRole))
 
+        # make combobox searchable
+        widget.setEditable(True)
+        widget.setInsertPolicy(widget.InsertPolicy.NoInsert)
+        widget.setFrame(False)
+        widget.completer().setCompletionMode(QtWidgets.QCompleter.CompletionMode.PopupCompletion)
+
         return widget
 
     def setEditorData(self, editor: QtWidgets.QWidget, index):

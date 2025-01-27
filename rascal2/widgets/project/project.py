@@ -52,6 +52,8 @@ class ProjectWidget(QtWidgets.QWidget):
         self.view_tabs = {}
         self.edit_tabs = {}
         self.draft_project = None
+        # for making model type changes non-destructive
+        self.old_contrast_models = {}
 
         project_view = self.create_project_view()
         project_edit = self.create_edit_view()
@@ -201,10 +203,14 @@ class ProjectWidget(QtWidgets.QWidget):
         self.edit_absorption_checkbox.checkStateChanged.connect(
             lambda s: self.update_draft_project({"absorption": s == QtCore.Qt.CheckState.Checked})
         )
+        # when calculation type changed, update the draft project and show/hide the domains tab
         self.calculation_combobox.currentTextChanged.connect(lambda s: self.update_draft_project({"calculation": s}))
         self.calculation_combobox.currentTextChanged.connect(lambda: self.handle_tabs())
-        self.model_combobox.currentTextChanged.connect(lambda s: self.update_draft_project({"model": s}))
+
+        # when model type changed, hide/show layers tab and
         self.model_combobox.currentTextChanged.connect(lambda: self.handle_tabs())
+        self.model_combobox.currentTextChanged.connect(lambda s: self.handle_model_update(s))
+
         self.geometry_combobox.currentTextChanged.connect(lambda s: self.update_draft_project({"geometry": s}))
         self.edit_project_tab = QtWidgets.QTabWidget()
 
@@ -287,6 +293,32 @@ class ProjectWidget(QtWidgets.QWidget):
         for tab in self.tabs:
             self.view_tabs[tab].handle_controls_update(controls)
             self.edit_tabs[tab].handle_controls_update(controls)
+
+    def handle_model_update(self, new_type):
+        """Handle updates to the model type.
+
+        Parameters
+        ----------
+        new_type : LayerModels
+            The new layer model.
+
+        """
+        if self.draft_project is None:
+            return
+
+        old_type = self.draft_project["model"]
+        self.update_draft_project({"model": new_type})
+
+        # we use 'xor' (^) as "if the old type was standard layers and the new type isn't, or vice versa"
+        if (old_type == LayerModels.StandardLayers) ^ (new_type == LayerModels.StandardLayers):
+            old_contrast_models = {}
+            # clear contrasts as what the 'model' means has changed!
+            for contrast in self.draft_project["contrasts"]:
+                old_contrast_models[contrast.name] = contrast.model
+                contrast.model = self.old_contrast_models.get(contrast.name, [])
+
+            self.old_contrast_models = old_contrast_models
+            self.edit_tabs["Contrasts"].tables["contrasts"].update_item_view()
 
     def show_project_view(self) -> None:
         """Show project view"""

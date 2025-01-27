@@ -252,6 +252,7 @@ class LayerStringListModel(QtCore.QStringListModel):
     def supportedDropActions(self):
         return QtCore.Qt.DropAction.MoveAction
 
+
 class StandardLayerModelWidget(QtWidgets.QWidget):
     """Widget for standard layer contrast models."""
 
@@ -266,10 +267,29 @@ class StandardLayerModelWidget(QtWidgets.QWidget):
         self.layer_list.setAcceptDrops(True)
         self.layer_list.setDropIndicatorShown(True)
 
+        self.layer_list.selectionModel().setCurrentIndex(
+            self.model.index(0, 0), QtCore.QItemSelectionModel.SelectionFlag.ClearAndSelect
+        )
+
         add_button = QtWidgets.QPushButton("+")
+        add_button.setToolTip("Add a layer after the currently selected layer (Shift+Enter)")
+        add_shortcut = QtGui.QShortcut(QtGui.QKeySequence("Shift+Return"), self)
         add_button.pressed.connect(self.append_item)
+        add_shortcut.activated.connect(self.append_item)
+
         delete_button = QtWidgets.QPushButton(icon=QtGui.QIcon(path_for("delete.png")))
+        delete_button.setToolTip("Delete the currently selected layer (Del)")
+        delete_shortcut = QtGui.QShortcut(QtGui.QKeySequence.StandardKey.Delete, self)
         delete_button.pressed.connect(self.delete_item)
+        delete_shortcut.activated.connect(self.delete_item)
+
+        edit_shortcut = QtGui.QShortcut(QtGui.QKeySequence("Tab"), self)
+        edit_shortcut.activated.connect(lambda: self.edit_item())
+
+        move_up_shortcut = QtGui.QShortcut(QtGui.QKeySequence("Shift+Up"), self)
+        move_down_shortcut = QtGui.QShortcut(QtGui.QKeySequence("Shift+Down"), self)
+        move_up_shortcut.activated.connect(lambda: self.move_item(-1))
+        move_down_shortcut.activated.connect(lambda: self.move_item(1))
 
         buttons = QtWidgets.QHBoxLayout()
         buttons.addWidget(add_button)
@@ -285,8 +305,11 @@ class StandardLayerModelWidget(QtWidgets.QWidget):
         """Append an item below the currently selected item."""
         if self.model is not None:
             selection_model = self.layer_list.selectionModel()
-            self.model.insertRow(selection_model.currentIndex().row() + 1)
-            self.model.setData(self.model.index(selection_model.currentIndex().row() + 1, 0), "Choose Layer...")
+            index = selection_model.currentIndex()
+            self.model.insertRow(index.row() + 1)
+            new_index = self.model.index(index.row() + 1, 0)
+            selection_model.setCurrentIndex(new_index, selection_model.SelectionFlag.ClearAndSelect)
+            self.layer_list.edit(new_index)
 
     def delete_item(self):
         """Delete the currently selected item."""
@@ -295,6 +318,39 @@ class StandardLayerModelWidget(QtWidgets.QWidget):
             index = selection_model.currentIndex()
             self.model.removeRow(index.row())
             self.model.dataChanged.emit(index, index)
+
+    def move_item(self, delta: int):
+        """Change the currently selected item's index by a number of rows.
+
+        Parameters
+        ----------
+        delta : int
+            The change in index of the selected item.
+
+        """
+        if self.model is not None:
+            selection_model = self.layer_list.selectionModel()
+            index = selection_model.currentIndex()
+
+            if index.row() + delta < 0:
+                new_row = 0
+            elif index.row() + delta >= self.model.rowCount():
+                new_row = self.model.rowCount() - 1
+            else:
+                new_row = index.row() + delta
+
+            new_index = self.model.index(new_row, 0)
+            item_data = self.model.data(index)
+            self.model.removeRow(index.row())
+            self.model.insertRow(new_index.row())
+            self.model.setData(new_index, item_data)
+            selection_model.setCurrentIndex(new_index, selection_model.SelectionFlag.ClearAndSelect)
+
+    def edit_item(self):
+        """Open the currently selected item's editor if it isn't already open."""
+        # if this check isn't here, Qt produces warnings into the terminal
+        if self.layer_list.state() != self.layer_list.State.EditingState:
+            self.layer_list.edit(self.layer_list.selectionModel().currentIndex())
 
 
 class ContrastWidget(AbstractProjectListWidget):
@@ -406,7 +462,9 @@ class ContrastWidget(AbstractProjectListWidget):
                 case "model":
                     if self.project_widget.draft_project["model"] == LayerModels.StandardLayers:
                         widget = StandardLayerModelWidget(current_data, self)
-                        widget.model.dataChanged.connect(lambda: self.model.set_data(i, field, widget.model.stringList()))
+                        widget.model.dataChanged.connect(
+                            lambda: self.model.set_data(i, field, widget.model.stringList())
+                        )
                         widget.model.rowsMoved.connect(lambda: self.model.set_data(i, field, widget.model.stringList()))
                         return widget
                     else:
@@ -414,7 +472,10 @@ class ContrastWidget(AbstractProjectListWidget):
                         widget.addItem("", [])
                         for file in self.project_widget.draft_project["custom_files"]:
                             widget.addItem(file.name, [file.name])
-                        widget.setCurrentText(current_data[0])
+                        if current_data:
+                            widget.setCurrentText(current_data[0])
+                        else:
+                            widget.setCurrentText("")
                         widget.currentTextChanged.connect(lambda: self.model.set_data(i, field, widget.currentData()))
                         return widget
                 # all other cases are comboboxes with data from other widget tables
