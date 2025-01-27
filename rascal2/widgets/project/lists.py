@@ -256,7 +256,7 @@ class LayerStringListModel(QtCore.QStringListModel):
 class StandardLayerModelWidget(QtWidgets.QWidget):
     """Widget for standard layer contrast models."""
 
-    def __init__(self, init_list: list[str], parent=None):
+    def __init__(self, init_list: list[str], parent):
         super().__init__(parent)
 
         self.model = LayerStringListModel(init_list, self)
@@ -413,7 +413,6 @@ class ContrastWidget(AbstractProjectListWidget):
         layout = QtWidgets.QVBoxLayout()
         layout.addLayout(top_grid)
         layout.addLayout(settings_row)
-        layout.addStretch()
         layout.addLayout(model_grid)
 
         widget = QtWidgets.QWidget(self)

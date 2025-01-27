@@ -433,7 +433,7 @@ class LayerFieldWidget(ProjectFieldWidget):
             else:
                 blank_option = self.model.headers[i - 1] == "hydration"
                 self.table.setItemDelegateForColumn(
-                    i, delegates.ParametersDelegate(self.project_widget, "parameters", self.table, blank_option)
+                    i, delegates.ProjectFieldDelegate(self.project_widget, "parameters", self.table, blank_option)
                 )
 
     def set_absorption(self, absorption: bool):
