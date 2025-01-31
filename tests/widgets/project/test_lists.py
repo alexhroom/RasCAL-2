@@ -14,6 +14,7 @@ class MockMainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.parent = MagicMock()
+        self.model = MagicMock()
         self.project_widget = MagicMock()
 
 

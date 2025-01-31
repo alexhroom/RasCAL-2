@@ -8,7 +8,7 @@ from PyQt6 import QtCore, QtWidgets
 from RATapi.utils.enums import Calculations, Geometries, LayerModels
 
 from rascal2.widgets.project.models import (
-    ClassListModel,
+    ClassListTableModel,
     ParameterFieldWidget,
     ParametersModel,
     ProjectFieldWidget,
@@ -57,8 +57,8 @@ def classlist():
 
 @pytest.fixture
 def table_model(classlist):
-    """A test ClassListModel."""
-    return ClassListModel(classlist, parent)
+    """A test ClassListTableModel."""
+    return ClassListTableModel(classlist, parent)
 
 
 @pytest.fixture

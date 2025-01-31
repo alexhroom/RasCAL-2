@@ -19,8 +19,6 @@ class ClassListItemModel(QtCore.QAbstractListModel, Generic[T]):
     ----------
     classlist : ClassList
         The initial classlist to represent in this model.
-    field : str
-        The name of the field represented by this model.
     parent : QtWidgets.QWidget
         The parent widget for the model.
 
@@ -96,6 +94,7 @@ class AbstractProjectListWidget(QtWidgets.QWidget):
     """An abstract base widget for editing items kept in a list."""
 
     item_type = "item"
+    classlist_model = ClassListItemModel
 
     def __init__(self, field: str, parent):
         super().__init__(parent)
@@ -144,11 +143,10 @@ class AbstractProjectListWidget(QtWidgets.QWidget):
             The classlist to set in the model.
 
         """
-        self.model = ClassListItemModel(classlist, self)
+        self.model = self.classlist_model(classlist, self)
         self.list.setModel(self.model)
         # this signal changes the current contrast shown in the editor to be the currently highlighted list item
         self.list.selectionModel().currentChanged.connect(lambda index, _: self.view_stack.setCurrentIndex(index.row()))
-
         self.update_item_view()
 
     def update_item_view(self):
@@ -260,9 +258,15 @@ class StandardLayerModelWidget(QtWidgets.QWidget):
         super().__init__(parent)
 
         self.model = LayerStringListModel(init_list, self)
+        self.domains = parent.model.domains
         self.layer_list = QtWidgets.QListView(parent)
         self.layer_list.setModel(self.model)
-        self.layer_list.setItemDelegateForColumn(0, ProjectFieldDelegate(parent.project_widget, "layers", self))
+        if self.domains:
+            self.layer_list.setItemDelegateForColumn(
+                0, ProjectFieldDelegate(parent.project_widget, "domain_contrasts", self)
+            )
+        else:
+            self.layer_list.setItemDelegateForColumn(0, ProjectFieldDelegate(parent.project_widget, "layers", self))
         self.layer_list.setDragEnabled(True)
         self.layer_list.setAcceptDrops(True)
         self.layer_list.setDropIndicatorShown(True)
@@ -271,10 +275,12 @@ class StandardLayerModelWidget(QtWidgets.QWidget):
             self.model.index(0, 0), QtCore.QItemSelectionModel.SelectionFlag.ClearAndSelect
         )
 
-        add_button = QtWidgets.QPushButton("+")
-        add_button.setToolTip("Add a layer after the currently selected layer (Shift+Enter)")
+        self.add_button = QtWidgets.QPushButton("+")
+        self.add_button.setToolTip("Add a layer after the currently selected layer (Shift+Enter)")
+        if self.model.rowCount() == 2:
+            self.add_button.setEnabled(False)
         add_shortcut = QtGui.QShortcut(QtGui.QKeySequence("Shift+Return"), self)
-        add_button.pressed.connect(self.append_item)
+        self.add_button.pressed.connect(self.append_item)
         add_shortcut.activated.connect(self.append_item)
 
         delete_button = QtWidgets.QPushButton(icon=QtGui.QIcon(path_for("delete.png")))
@@ -292,7 +298,7 @@ class StandardLayerModelWidget(QtWidgets.QWidget):
         move_down_shortcut.activated.connect(lambda: self.move_item(1))
 
         buttons = QtWidgets.QHBoxLayout()
-        buttons.addWidget(add_button)
+        buttons.addWidget(self.add_button)
         buttons.addWidget(delete_button)
 
         layout = QtWidgets.QVBoxLayout()
@@ -304,12 +310,20 @@ class StandardLayerModelWidget(QtWidgets.QWidget):
     def append_item(self):
         """Append an item below the currently selected item."""
         if self.model is not None:
+            # do not allow items to be added in domains for over 2 items
+            if self.domains and self.model.rowCount() == 2:
+                return
+
             selection_model = self.layer_list.selectionModel()
             index = selection_model.currentIndex()
             self.model.insertRow(index.row() + 1)
             new_index = self.model.index(index.row() + 1, 0)
             selection_model.setCurrentIndex(new_index, selection_model.SelectionFlag.ClearAndSelect)
             self.layer_list.edit(new_index)
+
+            # if 2 items have been reached by this adding, disable add button
+            if self.domains and self.model.rowCount() == 2:
+                self.add_button.setEnabled(False)
 
     def delete_item(self):
         """Delete the currently selected item."""
@@ -318,6 +332,9 @@ class StandardLayerModelWidget(QtWidgets.QWidget):
             index = selection_model.currentIndex()
             self.model.removeRow(index.row())
             self.model.dataChanged.emit(index, index)
+
+            # re-enable add button if disabled
+            self.add_button.setEnabled(True)
 
     def move_item(self, delta: int):
         """Change the currently selected item's index by a number of rows.
@@ -353,10 +370,71 @@ class StandardLayerModelWidget(QtWidgets.QWidget):
             self.layer_list.edit(self.layer_list.selectionModel().currentIndex())
 
 
+class ContrastModel(ClassListItemModel):
+    """ClassList item model for contrast data with or without a ratio."""
+
+    def __init__(self, classlist, parent):
+        super().__init__(classlist, parent)
+        self.domains = classlist._class_handle == RATapi.models.ContrastWithRatio
+        self.domain_ratios = {}
+
+    def set_domains(self, domains: bool):
+        """Set whether the classlist uses ContrastWithRatio.
+
+        Parameters
+        ----------
+        domains : bool
+            Whether the classlist should use ContrastWithRatio.
+
+        """
+        if domains != self.domains:
+            self.beginResetModel()
+            self.domains = domains
+            if domains:
+                classlist = RATapi.ClassList(
+                    [
+                        RATapi.models.ContrastWithRatio(
+                            **dict(contrast), domain_ratio=self.domain_ratios.get(contrast.name, "")
+                        )
+                        for contrast in self.classlist
+                    ]
+                )
+                # set handle manually if classlist is empty
+                classlist._class_handle = RATapi.models.ContrastWithRatio
+            else:
+                # save domain ratios so they aren't lost if the user toggles
+                # back and forth
+                self.domain_ratios = {contrast.name: contrast.domain_ratio for contrast in self.classlist}
+                classlist = RATapi.ClassList(
+                    [
+                        RATapi.models.Contrast(
+                            name=contrast.name,
+                            data=contrast.data,
+                            background=contrast.background,
+                            background_action=contrast.background_action,
+                            bulk_in=contrast.bulk_in,
+                            bulk_out=contrast.bulk_out,
+                            scalefactor=contrast.scalefactor,
+                            resolution=contrast.resolution,
+                            resample=contrast.resample,
+                            model=contrast.model,
+                        )
+                        for contrast in self.classlist
+                    ]
+                )
+                # set handle manually if classlist is empty
+                classlist._class_handle = RATapi.models.Contrast
+
+            self.classlist = classlist
+            self.item_type = classlist._class_handle
+            self.parent.project_widget.update_draft_project({"contrasts": classlist})
+
+
 class ContrastWidget(AbstractProjectListWidget):
     """Widget for viewing and editing Contrasts."""
 
     item_type = "contrast"
+    classlist_model = ContrastModel
 
     def compose_widget(self, i: int, data_widget: Callable[[str], QtWidgets.QWidget]) -> QtWidgets.QWidget:
         """Create the base grid layouts for the widget.
@@ -389,6 +467,9 @@ class ContrastWidget(AbstractProjectListWidget):
         top_grid.addWidget(data_widget("scalefactor"), 2, 3)
         top_grid.addWidget(QtWidgets.QLabel("Data:"), 2, 4)
         top_grid.addWidget(data_widget("data"), 2, 5)
+        if self.model.domains:
+            top_grid.addWidget(QtWidgets.QLabel("Domain Ratio:"), 3, 0)
+            top_grid.addWidget(data_widget("domain_ratio"), 3, 1, 1, -1)
 
         top_grid.setVerticalSpacing(10)
 
@@ -496,3 +577,15 @@ class ContrastWidget(AbstractProjectListWidget):
             return combobox
 
         return self.compose_widget(i, data_combobox)
+
+    def set_domains(self, domains: bool):
+        """Set whether the model uses ContrastWithRatio.
+
+        Parameters
+        ----------
+        domains : bool
+            Whether the model should use ContrastWithRatio.
+
+        """
+        self.model.set_domains(domains)
+        self.update_model(self.model.classlist)

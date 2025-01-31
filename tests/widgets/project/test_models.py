@@ -11,7 +11,7 @@ from RATapi.utils.enums import Languages
 import rascal2.widgets.delegates as delegates
 import rascal2.widgets.inputs as inputs
 from rascal2.widgets.project.models import (
-    ClassListModel,
+    ClassListTableModel,
     CustomFileModel,
     CustomFileWidget,
     DomainContrastWidget,
@@ -52,8 +52,8 @@ def classlist():
 
 @pytest.fixture
 def table_model(classlist):
-    """A test ClassListModel."""
-    return ClassListModel(classlist, parent)
+    """A test ClassListTableModel."""
+    return ClassListTableModel(classlist, parent)
 
 
 @pytest.fixture
@@ -93,7 +93,7 @@ parent = MockMainWindow()
 
 
 def test_model_init(table_model, classlist):
-    """Test that initialisation works correctly for ClassListModels."""
+    """Test that initialisation works correctly for ClassListTableModels."""
     model = table_model
 
     assert model.classlist == classlist
