@@ -1,8 +1,10 @@
 """Widget for the Project window."""
 
+from collections.abc import Generator
 from copy import deepcopy
 
 import RATapi
+from pydantic import ValidationError
 from PyQt6 import QtCore, QtGui, QtWidgets
 from RATapi.utils.enums import Calculations, Geometries, LayerModels
 
@@ -339,26 +341,42 @@ class ProjectWidget(QtWidgets.QWidget):
 
     def save_changes(self) -> None:
         """Save changes to the project."""
-        try:
-            self.validate_draft_project()
-        except ValueError as err:
-            self.parent.terminal_widget.write_error(f"Could not save draft project:\n  {err}")
+        errors = "\n  ".join(self.validate_draft_project())
+        if errors:
+            self.parent.terminal_widget.write_error(f"Could not save draft project:\n  {errors}")
         else:
-            self.parent.presenter.edit_project(self.draft_project)
-            self.update_project_view()
-            self.parent.controls_widget.run_button.setEnabled(True)
-            self.show_project_view()
+            # catch errors from Pydantic as fallback rather than crashing
+            try:
+                self.parent.presenter.edit_project(self.draft_project)
+            except ValidationError as err:
+                self.parent.terminal_widget.write_error(f"Could not save draft project:\n  {err}")
+            else:
+                self.update_project_view()
+                self.parent.controls_widget.run_button.setEnabled(True)
+                self.show_project_view()
 
-    def validate_draft_project(self):
-        """Check that the draft project is valid."""
-        errors = []
-        if self.draft_project["model"] == LayerModels.StandardLayers and self.draft_project["layers"]:
-            layer_attrs = list(self.draft_project["layers"][0].model_fields)
+    def validate_draft_project(self) -> Generator[str, None, None]:
+        """Get all errors with the draft project."""
+        yield from self.validate_layers()
+        yield from self.validate_contrasts()
+
+    def validate_layers(self) -> Generator[str, None, None]:
+        """Ensure that all layers in the draft project are valid, and yield errors if not.
+
+        Yields
+        ------
+        str
+            The message for each error in layers.
+
+        """
+        project = self.draft_project
+        if project["model"] == LayerModels.StandardLayers and project["layers"]:
+            layer_attrs = list(project["layers"][0].model_fields)
             layer_attrs.remove("name")
             layer_attrs.remove("hydrate_with")
             # ensure all layer parameters have been filled in, and all names are parameters that exist
-            valid_params = [p.name for p in self.draft_project["parameters"]] + [""]
-            for i, layer in enumerate(self.draft_project["layers"]):
+            valid_params = [p.name for p in project["parameters"]] + [""]
+            for i, layer in enumerate(project["layers"]):
                 missing_params = []
                 invalid_params = []
                 for attr in layer_attrs:
@@ -371,16 +389,72 @@ class ProjectWidget(QtWidgets.QWidget):
                 if missing_params:
                     noun = "a parameter" if len(missing_params) == 1 else "parameters"
                     msg = f"Layer '{layer.name}' (row {i + 1}) is missing {noun}: {', '.join(missing_params)}"
-                    errors.append(msg)
+                    yield msg
                 if invalid_params:
                     noun = "an invalid value" if len(invalid_params) == 1 else "invalid values"
                     msg = f"Layer '{layer.name}' (row {i + 1}) has {noun}: {{0}}".format(
                         ",\n  ".join(f'"{v}" for parameter {p}' for p, v in invalid_params)
                     )
-                    errors.append(msg)
+                    yield msg
 
-        if errors:
-            raise ValueError("\n  ".join(errors))
+    def validate_contrasts(self) -> Generator[str, None, None]:
+        """Ensure that all contrast parameters in the draft project are valid, and yield errors if not.
+
+        Yields
+        ------
+        str
+            The messages for each error in contrasts.
+
+        """
+        project = self.draft_project
+        if project["contrasts"]:
+            contrast_attrs = list(project["contrasts"][0].model_fields)
+            contrast_attrs.remove("name")
+            contrast_attrs.remove("background_action")
+            contrast_attrs.remove("model")
+            contrast_attrs.remove("resample")
+            for i, contrast in enumerate(project["contrasts"]):
+                missing_params = []
+                invalid_params = []
+                for attr in contrast_attrs:
+                    project_field_name = attr if attr in ["data", "bulk_in", "bulk_out"] else attr + "s"
+                    valid_params = [p.name for p in project[project_field_name]]
+                    param = getattr(contrast, attr)
+                    if param == "":
+                        missing_params.append(attr)
+                    elif param not in valid_params:
+                        invalid_params.append((attr, param))
+
+                if missing_params:
+                    msg = f"Contrast '{contrast.name}' (row {i + 1}) is missing: {', '.join(missing_params)}"
+                    yield msg
+                if invalid_params:
+                    noun = "an invalid value" if len(invalid_params) == 1 else "invalid values"
+                    msg = f"Contrast '{contrast.name}' (row {i + 1}) has {noun}: {{0}}".format(
+                        ",\n  ".join(f'"{v}" for field {p}' for p, v in invalid_params)
+                    )
+                    yield msg
+
+                model = contrast.model
+                if project["model"] == LayerModels.StandardLayers:
+                    if project["calculation"] == Calculations.Domains:
+                        model_field_name = "domain_contrasts"
+                    else:
+                        model_field_name = "layers"
+                    valid_params = [p.name for p in project[model_field_name]]
+                    invalid_model_vals = [item for item in model if item not in valid_params]
+                    # this is the fastest way to get all unique items from a list without changing the order...
+                    invalid_model_vals = list(dict.fromkeys(invalid_model_vals))
+                    if invalid_model_vals:
+                        noun = "an invalid model value" if len(invalid_model_vals) == 1 else "invalid model values"
+                        msg = f"Contrast '{contrast.name}' (row {i + 1}) has {noun}: {{0}}".format(
+                            ", ".join(invalid_model_vals)
+                        )
+                        yield msg
+                else:
+                    if model[0] not in [f.name for f in project["custom_files"]]:
+                        msg = f"Contrast '{contrast.name}' (row {i + 1}) has invalid model: {model[0]}"
+                        yield msg
 
     def cancel_changes(self) -> None:
         """Cancel changes to the project."""

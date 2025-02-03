@@ -528,7 +528,7 @@ class ContrastWidget(AbstractProjectListWidget):
             match field:
                 case "name":
                     widget = QtWidgets.QLineEdit(current_data)
-                    widget.textChanged.connect(lambda text: self.model.set_data(i, "name", text))
+                    widget.textChanged.connect(lambda text: self.set_name_data(i, text))
                     return widget
                 case "background_action":
                     widget = QtWidgets.QComboBox()
@@ -577,6 +577,22 @@ class ContrastWidget(AbstractProjectListWidget):
             return combobox
 
         return self.compose_widget(i, data_combobox)
+
+    def set_name_data(self, index: int, name: str):
+        """Set name data, ensuring name isn't empty.
+
+        Parameters
+        ----------
+        index : int
+            The index of the contrast.
+        name : str
+            The desired name for the contrast.
+
+        """
+        if name != "":
+            self.model.set_data(index, "name", name)
+        else:
+            self.model.set_data(index, "name", "Unnamed Contrast")
 
     def set_domains(self, domains: bool):
         """Set whether the model uses ContrastWithRatio.
