@@ -258,9 +258,10 @@ class StandardLayerModelWidget(QtWidgets.QWidget):
         super().__init__(parent)
 
         self.model = LayerStringListModel(init_list, self)
+        self.domains = parent.model.domains
         self.layer_list = QtWidgets.QListView(parent)
         self.layer_list.setModel(self.model)
-        if parent.model.domains:
+        if self.domains:
             self.layer_list.setItemDelegateForColumn(
                 0, ProjectFieldDelegate(parent.project_widget, "domain_contrasts", self)
             )
@@ -274,10 +275,12 @@ class StandardLayerModelWidget(QtWidgets.QWidget):
             self.model.index(0, 0), QtCore.QItemSelectionModel.SelectionFlag.ClearAndSelect
         )
 
-        add_button = QtWidgets.QPushButton("+")
-        add_button.setToolTip("Add a layer after the currently selected layer (Shift+Enter)")
+        self.add_button = QtWidgets.QPushButton("+")
+        self.add_button.setToolTip("Add a layer after the currently selected layer (Shift+Enter)")
+        if self.model.rowCount() == 2:
+            self.add_button.setEnabled(False)
         add_shortcut = QtGui.QShortcut(QtGui.QKeySequence("Shift+Return"), self)
-        add_button.pressed.connect(self.append_item)
+        self.add_button.pressed.connect(self.append_item)
         add_shortcut.activated.connect(self.append_item)
 
         delete_button = QtWidgets.QPushButton(icon=QtGui.QIcon(path_for("delete.png")))
@@ -295,7 +298,7 @@ class StandardLayerModelWidget(QtWidgets.QWidget):
         move_down_shortcut.activated.connect(lambda: self.move_item(1))
 
         buttons = QtWidgets.QHBoxLayout()
-        buttons.addWidget(add_button)
+        buttons.addWidget(self.add_button)
         buttons.addWidget(delete_button)
 
         layout = QtWidgets.QVBoxLayout()
@@ -307,12 +310,20 @@ class StandardLayerModelWidget(QtWidgets.QWidget):
     def append_item(self):
         """Append an item below the currently selected item."""
         if self.model is not None:
+            # do not allow items to be added in domains for over 2 items
+            if self.domains and self.model.rowCount() == 2:
+                return
+
             selection_model = self.layer_list.selectionModel()
             index = selection_model.currentIndex()
             self.model.insertRow(index.row() + 1)
             new_index = self.model.index(index.row() + 1, 0)
             selection_model.setCurrentIndex(new_index, selection_model.SelectionFlag.ClearAndSelect)
             self.layer_list.edit(new_index)
+
+            # if 2 items have been reached by this adding, disable add button
+            if self.domains and self.model.rowCount() == 2:
+                self.add_button.setEnabled(False)
 
     def delete_item(self):
         """Delete the currently selected item."""
@@ -321,6 +332,9 @@ class StandardLayerModelWidget(QtWidgets.QWidget):
             index = selection_model.currentIndex()
             self.model.removeRow(index.row())
             self.model.dataChanged.emit(index, index)
+
+            # re-enable add button if disabled
+            self.add_button.setEnabled(True)
 
     def move_item(self, delta: int):
         """Change the currently selected item's index by a number of rows.
