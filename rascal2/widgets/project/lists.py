@@ -605,3 +605,138 @@ class ContrastWidget(AbstractProjectListWidget):
         """
         self.model.set_domains(domains)
         self.update_model(self.model.classlist)
+
+
+class ArrayTableModel(QtCore.QAbstractTableModel):
+    """Table model for array data."""
+
+    def __init__(self, data):
+        super().__init__()
+        self.data = data
+
+    def data(self, index, role):
+        if role == QtCore.Qt.ItemDataRole.DisplayRole:
+            return str(self.data[index.row()][index.column()])
+
+    def rowCount(self, index):
+        return len(self.data)
+
+    def columnCount(self, index):
+        return len(self.data[0])
+
+
+class DataPreviewWidget(QtWidgets.QWidget):
+    """Widget for previewing array data."""
+
+    def __init__(self, data, parent=None):
+        super().__init__(parent)
+
+        self.model = ArrayTableModel(data)
+        self.table = QtWidgets.QTableView()
+        self.table.setModel(self.model)
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(self.table)
+
+        self.setLayout(layout)
+
+
+class DataWidget(AbstractProjectListWidget):
+    """Widget for viewing and editing Data."""
+
+    item_type = "dataset"
+
+    def update_model(self, classlist):
+        super().update_model(classlist)
+        # disable deleting the Simulation dataset
+        self.list.selectionModel().currentChanged.connect(
+            lambda index, _: self.delete_button.setEnabled(index.row() != 0)
+        )
+
+    def compose_widget(self, i: int, data_widget: Callable[[str], QtWidgets.QWidget]) -> QtWidgets.QWidget:
+        """Create the base grid layouts for the widget.
+
+        Parameters
+        ----------
+        i : int
+            The row of the contrasts list to display in this widget.
+        data_widget : Callable[[str], QtWidgets.QWidget]
+            A function which takes a field name and returns the data widget for that field.
+
+        Returns
+        -------
+        QtWidgets.QWidget
+            The resulting widget for the item.
+
+        """
+        simulation = self.model.get_item(i).name == "Simulation"
+
+        layout = QtWidgets.QGridLayout()
+        layout.addWidget(QtWidgets.QLabel("Contrast Name:"), 0, 0)
+        layout.addWidget(data_widget("name"), 0, 1, 1, -1)
+
+        layout.addWidget(QtWidgets.QLabel("Simulation range:"), 1, 0)
+        layout.addWidget(data_widget("simulation_range"), 2, 0, 1, 2)
+        if simulation:
+            layout.addWidget(QtWidgets.QWidget(), 1, 2, 2, 2)
+            layout.addWidget(QtWidgets.QWidget(), 3, 0, 2, -1)
+        else:
+            layout.addWidget(QtWidgets.QLabel("Data range:"), 1, 2)
+            layout.addWidget(data_widget("data_range"), 2, 2, 1, 2)
+            layout.addWidget(QtWidgets.QLabel("Preview Data"), 3, 0, 1, -1, QtCore.Qt.AlignmentFlag.AlignHCenter)
+            layout.addWidget(data_widget("data"), 4, 0, 1, -1, QtCore.Qt.AlignmentFlag.AlignHCenter)
+
+        widget = QtWidgets.QWidget(self)
+        widget.setLayout(layout)
+
+        return widget
+
+    def create_view(self, i):
+        def data_viewer(field):
+            current_data = getattr(self.model.get_item(i), field)
+            match field:
+                case "name":
+                    widget = QtWidgets.QLineEdit(current_data)
+                    widget.setReadOnly(True)
+                    return widget
+                case "data":
+                    return DataPreviewWidget(current_data)
+                case _:
+                    return QtWidgets.QLabel(field)
+
+        return self.compose_widget(i, data_viewer)
+
+    def create_editor(self, i):
+        def data_editor(field):
+            current_data = getattr(self.model.get_item(i), field)
+            match field:
+                case "name":
+                    widget = QtWidgets.QLineEdit(current_data)
+                    if current_data == "Simulation":
+                        widget.setReadOnly(True)
+                    else:
+                        widget.textChanged.connect(lambda text: self.set_name_data(i, text))
+                    return widget
+                case "data":
+                    return DataPreviewWidget(current_data)
+                case _:
+                    return QtWidgets.QLabel(field)
+
+        return self.compose_widget(i, data_editor)
+
+    def set_name_data(self, index: int, name: str):
+        """Set name data, ensuring name isn't empty.
+
+        Parameters
+        ----------
+        index : int
+            The index of the dataset.
+        name : str
+            The desired name for the dataset.
+
+        """
+        if name != "":
+            self.model.set_data(index, "name", name)
+        else:
+            self.model.set_data(index, "name", "Unnamed Data")
+

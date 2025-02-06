@@ -9,7 +9,7 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 from RATapi.utils.enums import Calculations, Geometries, LayerModels
 
 from rascal2.config import path_for
-from rascal2.widgets.project.lists import ContrastWidget
+from rascal2.widgets.project.lists import ContrastWidget, DataWidget
 from rascal2.widgets.project.models import (
     CustomFileWidget,
     DomainContrastWidget,
@@ -44,7 +44,7 @@ class ProjectWidget(QtWidgets.QWidget):
             "Parameters": ["parameters"],
             "Experimental Parameters": ["scalefactors", "bulk_in", "bulk_out"],
             "Layers": ["layers"],
-            "Data": [],
+            "Data": ["data"],
             "Backgrounds": [],
             "Domains": ["domain_ratios", "domain_contrasts"],
             "Custom Files": ["custom_files"],
@@ -503,6 +503,8 @@ class ProjectTabWidget(QtWidgets.QWidget):
                 self.tables[field] = CustomFileWidget(field, self)
             elif field == "contrasts":
                 self.tables[field] = ContrastWidget(field, self)
+            elif field == "data":
+                self.tables[field] = DataWidget(field, self)
             else:
                 self.tables[field] = ProjectFieldWidget(field, self)
             layout.addWidget(self.tables[field])
