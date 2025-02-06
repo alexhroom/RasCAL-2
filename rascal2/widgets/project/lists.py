@@ -1,5 +1,6 @@
 """Tab model/views which are based on a list at the side of the widget."""
 
+from pathlib import Path
 from typing import Any, Callable, Generic, TypeVar
 
 import RATapi
@@ -7,7 +8,9 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 from RATapi.utils.enums import BackgroundActions, LayerModels
 
 from rascal2.config import path_for
+from rascal2.core.readers import readers
 from rascal2.widgets.delegates import ProjectFieldDelegate
+from rascal2.widgets.inputs import RangeWidget
 
 T = TypeVar("T")
 
@@ -72,9 +75,16 @@ class ClassListItemModel(QtCore.QAbstractListModel, Generic[T]):
         setattr(self.classlist[row], param, value)
         self.endResetModel()
 
-    def append_item(self):
-        """Append an item to the ClassList."""
-        self.classlist.append(self.item_type())
+    def append_item(self, item: T = None):
+        """Append an item to the ClassList.
+
+        Parameters
+        ----------
+        item : T, optional
+            The item to append. If None, will add a blank item.
+        """
+
+        self.classlist.append(item if item is not None else self.item_type())
         self.endResetModel()
 
     def delete_item(self, row: int):
@@ -180,10 +190,17 @@ class AbstractProjectListWidget(QtWidgets.QWidget):
         self.edit_mode = True
         self.update_item_view()
 
-    def append_item(self):
-        """Append an item to the model if the model exists."""
+    def append_item(self, item=None):
+        """Append an item to the model if the model exists.
+
+        Parameters
+        ----------
+        item : T, optional
+            The item to add to the model. If unset, a blank item will be added.
+
+        """
         if self.model is not None:
-            self.model.append_item()
+            self.model.append_item(item)
 
         new_widget_index = self.model.rowCount() - 1
         # handle if no contrasts currently exist
@@ -600,3 +617,167 @@ class ContrastWidget(AbstractProjectListWidget):
         """
         self.model.set_domains(domains)
         self.update_model(self.model.classlist)
+
+
+class ArrayTableModel(QtCore.QAbstractTableModel):
+    """Table model for array data."""
+
+    def __init__(self, data):
+        super().__init__()
+        self.data = data
+
+    def data(self, index, role):
+        if role == QtCore.Qt.ItemDataRole.DisplayRole:
+            return str(self.data[index.row()][index.column()])
+
+    def rowCount(self, index=None):
+        return len(self.data)
+
+    def columnCount(self, index=None):
+        return len(self.data[0])
+
+
+class DataWidget(AbstractProjectListWidget):
+    """Widget for viewing and editing Data."""
+
+    item_type = "dataset"
+
+    def __init__(self, field: str, parent):
+        super().__init__(field, parent)
+        self.file_dialog = QtWidgets.QFileDialog(parent=self)
+
+    def append_item(self):
+        file_paths = self.file_dialog.getOpenFileNames(self, "Select data files to open")[0]
+        for path in file_paths:
+            try:
+                data = readers[Path(path).suffix]().read(path)
+            except ValueError as err:
+                self.parent.parent.parent.terminal_widget.write_error(f"Failed to load {path}: {err}")
+            else:
+                for dataset in data:
+                    super().append_item(dataset)
+
+    def update_model(self, classlist):
+        super().update_model(classlist)
+        # disable deleting the Simulation dataset
+        self.list.selectionModel().currentChanged.connect(
+            lambda index, _: self.delete_button.setEnabled(index.row() != 0)
+        )
+
+    def compose_widget(self, i: int, data_widget: Callable[[str], QtWidgets.QWidget]) -> QtWidgets.QWidget:
+        """Create the base grid layouts for the widget.
+
+        Parameters
+        ----------
+        i : int
+            The row of the contrasts list to display in this widget.
+        data_widget : Callable[[str], QtWidgets.QWidget]
+            A function which takes a field name and returns the data widget for that field.
+
+        Returns
+        -------
+        QtWidgets.QWidget
+            The resulting widget for the item.
+
+        """
+        simulation = self.model.get_item(i).name == "Simulation"
+
+        layout = QtWidgets.QGridLayout()
+        layout.addWidget(QtWidgets.QLabel("Dataset Name:"), 0, 0)
+        layout.addWidget(data_widget("name"), 0, 1, 1, -1)
+
+        layout.addWidget(QtWidgets.QLabel("Simulation range:"), 1, 0)
+        layout.addWidget(data_widget("simulation_range"), 2, 0, 1, 2)
+        if simulation:
+            layout.addWidget(QtWidgets.QWidget(), 1, 2, 2, 2)
+            layout.addWidget(QtWidgets.QWidget(), 3, 0, 2, -1)
+        else:
+            layout.addWidget(QtWidgets.QLabel("Data range:"), 1, 2)
+            layout.addWidget(data_widget("data_range"), 2, 2, 1, 2)
+            layout.addWidget(QtWidgets.QLabel("Preview Data"), 3, 0, 1, -1, QtCore.Qt.AlignmentFlag.AlignHCenter)
+            layout.addWidget(data_widget("data"), 4, 0, 1, -1, QtCore.Qt.AlignmentFlag.AlignHCenter)
+
+        widget = QtWidgets.QWidget(self)
+        widget.setLayout(layout)
+
+        return widget
+
+    def create_view(self, i):
+        def data_viewer(field):
+            current_data = getattr(self.model.get_item(i), field)
+            match field:
+                case "name":
+                    widget = QtWidgets.QLineEdit(current_data)
+                    widget.setReadOnly(True)
+                    return widget
+                case "data":
+                    model = ArrayTableModel(current_data)
+                    widget = QtWidgets.QTableView()
+                    widget.setModel(model)
+                    return widget 
+                case _:
+                    min_box = QtWidgets.QLineEdit(str(current_data[0]))
+                    max_box = QtWidgets.QLineEdit(str(current_data[1]))
+                    min_box.setReadOnly(True)
+                    max_box.setReadOnly(True)
+                    layout = QtWidgets.QHBoxLayout()
+                    layout.addWidget(min_box)
+                    layout.addWidget(max_box)
+
+                    widget = QtWidgets.QWidget()
+                    widget.setLayout(layout)
+
+                    return widget
+
+        return self.compose_widget(i, data_viewer)
+
+    def create_editor(self, i):
+        def data_editor(field):
+            current_data = getattr(self.model.get_item(i), field)
+            match field:
+                case "name":
+                    widget = QtWidgets.QLineEdit(current_data)
+                    if current_data == "Simulation":
+                        widget.setReadOnly(True)
+                    else:
+                        widget.textChanged.connect(lambda text: self.set_name_data(i, text))
+                    return widget
+                case "data":
+                    model = ArrayTableModel(current_data)
+                    widget = QtWidgets.QTableView()
+                    widget.setModel(model)
+                    return widget 
+                case _:
+                    widget = RangeWidget()
+                    widget.set_data(current_data)
+                    data_array = self.model.get_item(i).data
+                    if data_array.size > 0:
+                        q_data = data_array[:, 0]
+                        q_range = (float(q_data.min()), float(q_data.max()))
+                        if field == "simulation_range":
+                            widget.set_inner_limit(q_range)
+                        else:
+                            widget.min_box.setMinimum(float(q_data.min()))
+                            widget.max_box.setMaximum(float(q_data.max()))
+                            widget.min_box.valueChanged.connect(lambda v: widget.max_box.setMinimum(v))
+                            widget.max_box.valueChanged.connect(lambda v: widget.min_box.setMaximum(v))
+                            widget.set_outer_limit(q_range)
+                    return widget
+
+        return self.compose_widget(i, data_editor)
+
+    def set_name_data(self, index: int, name: str):
+        """Set name data, ensuring name isn't empty.
+
+        Parameters
+        ----------
+        index : int
+            The index of the dataset.
+        name : str
+            The desired name for the dataset.
+
+        """
+        if name != "":
+            self.model.set_data(index, "name", name)
+        else:
+            self.model.set_data(index, "name", "Unnamed Data")
