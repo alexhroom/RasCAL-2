@@ -3,7 +3,7 @@
 from enum import Enum
 from math import floor, log10
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterable
 
 from pydantic.fields import FieldInfo
 from PyQt6 import QtCore, QtGui, QtWidgets
@@ -301,6 +301,70 @@ class AdaptiveDoubleSpinBox(QtWidgets.QDoubleSpinBox):
         return super().validate(input_text, pos)
 
 
+class RangeWidget(QtWidgets.QWidget):
+    """A widget to choose a minimum and maximum float, e.g. for a range."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.min_box = AdaptiveDoubleSpinBox()
+        self.max_box = AdaptiveDoubleSpinBox()
+
+        self.min_box.valueChanged.connect(lambda v: self.max_box.setMinimum(v))
+        self.max_box.valueChanged.connect(lambda v: self.min_box.setMaximum(v))
+
+        layout = QtWidgets.QHBoxLayout()
+        layout.addWidget(self.min_box)
+        layout.addWidget(self.max_box)
+
+        self.setLayout(layout)
+
+    def set_data(self, data: Iterable[float]):
+        """Set data for the widget.
+
+        Parameters
+        ----------
+        data : Iterable[float]
+            A two-item iterable giving a maximum and minimum value.
+
+        """
+        self.min_box.setValue(data[0])
+        self.max_box.setValue(data[1])
+
+    def get_data(self) -> list[float]:
+        """Get the data from the widget as a list of two values.
+
+        Returns
+        -------
+        list[float]
+            A two-item list of the minimum and maximum respectively.
+
+        """
+        return [self.min_box.value(), self.max_box.value()]
+
+    def set_outer_limit(self, limit: Iterable[float]):
+        """Set an outer limit for the range.
+
+        Parameters
+        ----------
+        data : Iterable[float]
+            A two-item iterable giving a maximum and minimum value that the range can be.
+
+        """
+        self.min_box.setMinimum(limit[0])
+        self.max_box.setMaximum(limit[1])
+
+    def set_inner_limit(self, limit: Iterable[float]):
+        """Set an inner limit for the range.
+
+        Parameters
+        ----------
+        data : Iterable[float]
+            A two-item iterable giving values that the range must be larger than. 
+
+        """
+        self.min_box.setMaximum(limit[0])
+        self.max_box.setMinimum(limit[1])
+
+
 class MultiSelectComboBox(QtWidgets.QComboBox):
     """
     A custom combo box widget that allows for multi-select functionality.
@@ -457,3 +521,4 @@ class MultiSelectComboBox(QtWidgets.QComboBox):
         """
         super().showEvent(event)
         self.update_text()
+

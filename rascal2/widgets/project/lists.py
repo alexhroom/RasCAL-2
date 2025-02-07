@@ -8,6 +8,7 @@ from RATapi.utils.enums import BackgroundActions, LayerModels
 
 from rascal2.config import path_for
 from rascal2.widgets.delegates import ProjectFieldDelegate
+from rascal2.widgets.inputs import RangeWidget
 
 T = TypeVar("T")
 
@@ -634,6 +635,9 @@ class DataPreviewWidget(QtWidgets.QWidget):
         self.model = ArrayTableModel(data)
         self.table = QtWidgets.QTableView()
         self.table.setModel(self.model)
+        self.table.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding
+        ) 
 
         layout = QtWidgets.QVBoxLayout()
         layout.addWidget(self.table)
@@ -702,7 +706,18 @@ class DataWidget(AbstractProjectListWidget):
                 case "data":
                     return DataPreviewWidget(current_data)
                 case _:
-                    return QtWidgets.QLabel(field)
+                    min_box = QtWidgets.QLineEdit(str(current_data[0]))
+                    max_box = QtWidgets.QLineEdit(str(current_data[1]))
+                    min_box.setReadOnly(True)
+                    max_box.setReadOnly(True)
+                    layout = QtWidgets.QHBoxLayout()
+                    layout.addWidget(min_box)
+                    layout.addWidget(max_box)
+                    
+                    widget = QtWidgets.QWidget()
+                    widget.setLayout(layout)
+
+                    return widget
 
         return self.compose_widget(i, data_viewer)
 
@@ -720,7 +735,9 @@ class DataWidget(AbstractProjectListWidget):
                 case "data":
                     return DataPreviewWidget(current_data)
                 case _:
-                    return QtWidgets.QLabel(field)
+                    widget = RangeWidget()
+                    widget.set_data(current_data) 
+                    return widget
 
         return self.compose_widget(i, data_editor)
 
