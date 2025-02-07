@@ -6,6 +6,7 @@ from copy import deepcopy
 import RATapi
 from pydantic import ValidationError
 from PyQt6 import QtCore, QtGui, QtWidgets
+from RATapi.utils.custom_errors import custom_pydantic_validation_error
 from RATapi.utils.enums import Calculations, Geometries, LayerModels
 
 from rascal2.config import path_for
@@ -349,7 +350,9 @@ class ProjectWidget(QtWidgets.QWidget):
             try:
                 self.parent.presenter.edit_project(self.draft_project)
             except ValidationError as err:
-                self.parent.terminal_widget.write_error(f"Could not save draft project:\n  {err}")
+                custom_error_list = custom_pydantic_validation_error(err.errors(include_url=False))
+                custom_errors = ValidationError.from_exception_data(err.title, custom_error_list, hide_input=True)
+                self.parent.terminal_widget.write_error(f"Could not save draft project:\n  {custom_errors}")
             else:
                 self.update_project_view()
                 self.parent.controls_widget.run_button.setEnabled(True)
