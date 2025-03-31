@@ -3,6 +3,7 @@
 from typing import Literal
 
 from PyQt6 import QtCore, QtGui, QtWidgets
+from RATapi.utils.enums import TypeOptions
 
 from rascal2.widgets.inputs import AdaptiveDoubleSpinBox, MultiSelectComboBox, get_validated_input
 
@@ -146,6 +147,28 @@ class ProjectFieldDelegate(QtWidgets.QStyledItemDelegate):
     def setModelData(self, editor, model, index):
         data = editor.currentText()
         model.setData(index, data, QtCore.Qt.ItemDataRole.EditRole)
+
+
+class SignalSourceDelegate(QtWidgets.QStyledItemDelegate):
+    """Item delegate to choose from draft project parameters, with a check for different source types."""
+
+    def __init__(self, project_widget, parameter_field, parent):
+        super().__init__(parent)
+        self.parameter_field = parameter_field
+        self.project_widget = project_widget
+        self.parent = parent
+
+    def createEditor(self, parent, option, index):
+        match index.siblingAtColumn(index.column() - 1).data(QtCore.Qt.ItemDataRole.DisplayRole):
+            case TypeOptions.Constant:
+                field = self.parameter_field
+            case TypeOptions.Data:
+                field = "data"
+            case TypeOptions.Function:
+                field = "custom_files"
+        editor_delegate = ProjectFieldDelegate(self.project_widget, field, self.parent)
+
+        return editor_delegate.createEditor(parent, option, index)
 
 
 class MultiSelectLayerDelegate(QtWidgets.QStyledItemDelegate):
