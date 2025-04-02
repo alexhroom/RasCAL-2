@@ -714,6 +714,15 @@ class ResolutionsFieldWidget(AbstractSignalFieldWidget):
 
     classlist_model = ResolutionsModel
 
+    def set_item_delegates(self):
+        super().set_item_delegates()
+        # workaround to remove function resolution option
+        type_index = self.model.headers.index("type") + 1
+        self.table.setItemDelegateForColumn(
+            type_index,
+            delegates.ValidatedInputDelegate(self.model.item_type.model_fields["type"], self.table, remove_items=[2]),
+        )
+
     @property
     def parameter_field(self) -> str:
         return "resolution_parameters"

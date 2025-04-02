@@ -11,10 +11,13 @@ from rascal2.widgets.inputs import AdaptiveDoubleSpinBox, MultiSelectComboBox, g
 class ValidatedInputDelegate(QtWidgets.QStyledItemDelegate):
     """Item delegate for validated inputs."""
 
-    def __init__(self, field_info, parent):
+    def __init__(self, field_info, parent, remove_items: list[int] = None):
         super().__init__(parent)
         self.table = parent
         self.field_info = field_info
+
+        # this parameter is mostly just a hacky thing to remove function resolutions
+        self.remove_items = remove_items
 
     def createEditor(self, parent, option, index):
         widget = get_validated_input(self.field_info, parent)
@@ -23,6 +26,10 @@ class ValidatedInputDelegate(QtWidgets.QStyledItemDelegate):
         # fill in background as otherwise you can see the original View text underneath
         widget.setAutoFillBackground(True)
         widget.setBackgroundRole(QtGui.QPalette.ColorRole.Base)
+
+        if self.remove_items is not None:
+            for item in self.remove_items:
+                widget.editor.removeItem(item)
 
         return widget
 
