@@ -4,7 +4,7 @@ import pytest
 import RATapi
 from PyQt6 import QtWidgets
 
-from rascal2.widgets.plot import RefSLDWidget
+from rascal2.widgets.plot import ContourPlotWidget, RefSLDWidget
 
 
 class MockWindowView(QtWidgets.QMainWindow):
@@ -25,6 +25,14 @@ def sld_widget():
     sld_widget.canvas = MagicMock()
 
     return sld_widget
+
+
+@pytest.fixture
+def contour_widget():
+    contour_widget = ContourPlotWidget(view)
+    contour_widget.canvas = MagicMock()
+
+    return contour_widget
 
 
 def test_ref_sld_toggle_setting(sld_widget):
@@ -97,3 +105,58 @@ def test_ref_sld_plot(mock_inputs, sld_widget):
         sld_widget.plot(project, result)
         assert sld_widget.current_plot_data is data
         sld_widget.canvas.draw.assert_called_once()
+
+
+@patch("RATapi.plotting.RATapi.plotting.plot_contour")
+def test_contour_plot_fit_names(mock_plot_contour, contour_widget):
+    """Test that the contour plot widget plots when fit names are selected."""
+    bayes_results = MagicMock(spec=RATapi.outputs.BayesResults)
+    bayes_results.fitNames = ["A", "B", "C"]
+
+    contour_widget.plot(None, bayes_results)
+    contour_widget.x_param_box.setCurrentText("A")
+    contour_widget.y_param_box.setCurrentText("B")
+
+    mock_plot_contour.assert_called_once()
+    mock_plot_contour.reset_mock()
+
+    contour_widget.y_param_box.setCurrentText("C")
+    mock_plot_contour.assert_called_once()
+
+
+def test_contour_plot_no_bayes(contour_widget):
+    """Test that the contour plot settings are only available when the results are Bayesian."""
+    normal_results = MagicMock(spec=RATapi.outputs.Results)
+    bayes_results = MagicMock(spec=RATapi.outputs.BayesResults)
+    normal_results.fitNames = []
+    bayes_results.fitNames = []
+
+    assert not contour_widget.x_param_box.isEnabled()
+    assert not contour_widget.y_param_box.isEnabled()
+    assert contour_widget.error_msg.isVisibleTo(contour_widget)
+
+    contour_widget.plot(None, bayes_results)
+    assert contour_widget.x_param_box.isEnabled()
+    assert contour_widget.y_param_box.isEnabled()
+    assert not contour_widget.error_msg.isVisibleTo(contour_widget)
+
+    contour_widget.plot(None, normal_results)
+    assert not contour_widget.x_param_box.isEnabled()
+    assert not contour_widget.y_param_box.isEnabled()
+    assert contour_widget.error_msg.isVisibleTo(contour_widget)
+
+
+def test_contour_plot_fitnames(contour_widget):
+    """Test that the names in each combobox are the results fitnames."""
+    bayes_results = MagicMock(spec=RATapi.outputs.BayesResults)
+    bayes_results.fitNames = ["A", "B", "C"]
+
+    contour_widget.plot(None, bayes_results)
+
+    for combo_box in [contour_widget.x_param_box, contour_widget.y_param_box]:
+        assert [combo_box.itemText(i) for i in range(combo_box.count())] == ["", "A", "B", "C"]
+
+    bayes_results.fitNames = ["A", "D"]
+    contour_widget.plot(None, bayes_results)
+    for combo_box in [contour_widget.x_param_box, contour_widget.y_param_box]:
+        assert [combo_box.itemText(i) for i in range(combo_box.count())] == ["", "A", "D"]
