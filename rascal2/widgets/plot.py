@@ -358,10 +358,6 @@ class HistPlotWidget(AbstractPlotWidget):
 class ContourPlotWidget(AbstractPlotWidget):
     """Widget for plotting a contour plot of two parameters."""
 
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.layout().setStretch(1, 0)
-
     def make_control_layout(self):
         control_layout = QtWidgets.QVBoxLayout()
 

@@ -131,6 +131,8 @@ def test_contour_plot_no_bayes(contour_widget):
     normal_results.fitNames = []
     bayes_results.fitNames = []
 
+    contour_widget.toggle_settings(toggled_on=True)
+
     assert not contour_widget.x_param_box.isEnabled()
     assert not contour_widget.y_param_box.isEnabled()
     assert contour_widget.error_msg.isVisibleTo(contour_widget)
