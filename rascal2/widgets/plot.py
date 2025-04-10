@@ -81,7 +81,12 @@ class PlotWidget(QtWidgets.QWidget):
         if isclass(plot_widget):
             plot_widget = plot_widget(self)
 
+        new_tab_index = self.plot_tabs.count()
         self.plot_tabs.addTab(plot_widget, plot_type)
+        plot_widget.tab_name_box.setText(plot_type)
+        plot_widget.tab_name_box.textEdited.connect(
+            lambda s: self.plot_tabs.setTabText(new_tab_index, (s or plot_type))
+        )
 
     def update_plots(self):
         """Update all plots to current model results."""
@@ -93,8 +98,9 @@ class PlotWidget(QtWidgets.QWidget):
         self.reflectivity_plot.plot_event(event)
 
     def clear(self):
-        """Clear the canvas."""
-        pass
+        """Clear all canvases."""
+        for i in range(0, self.plot_tabs.count()):
+            self.plot_tabs.widget(i).clear()
 
 
 class AbstractPlotWidget(QtWidgets.QWidget):
@@ -107,16 +113,45 @@ class AbstractPlotWidget(QtWidgets.QWidget):
         self.current_plot_data = None
 
         main_layout = QtWidgets.QHBoxLayout()
-        control_layout = self.make_control_layout()
+
+        sidebar = QtWidgets.QVBoxLayout()
+
+        self.plot_controls = QtWidgets.QWidget()
+        plot_controls_layout = self.make_control_layout()
+        self.plot_controls.setLayout(plot_controls_layout)
+
+        top_tab = QtWidgets.QHBoxLayout()
+        self.tab_name_box = QtWidgets.QLineEdit()
+        self.toggle_button = QtWidgets.QToolButton()
+        self.toggle_button.toggled.connect(self.toggle_settings)
+        self.toggle_button.setCheckable(True)
+        self.toggle_settings(self.toggle_button.isChecked())
+
+        top_tab.addWidget(self.tab_name_box)
+        top_tab.addWidget(self.toggle_button)
+
+        top_tab.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+
+        sidebar.addLayout(top_tab)
+        sidebar.addWidget(self.plot_controls)
 
         self.figure = self.make_figure()
         self.canvas = FigureCanvas(self.figure)
         self.canvas.setParent(self)
         self.setMinimumHeight(300)
 
-        main_layout.addLayout(control_layout, 0)
+        main_layout.addLayout(sidebar, 0)
         main_layout.addWidget(self.canvas, 4)
         self.setLayout(main_layout)
+
+    def toggle_settings(self, toggled_on: bool):
+        """Toggles the visibility of the plot controls"""
+        self.plot_controls.setVisible(toggled_on)
+        self.tab_name_box.setVisible(toggled_on)
+        if toggled_on:
+            self.toggle_button.setIcon(QtGui.QIcon(path_for("hide-settings.png")))
+        else:
+            self.toggle_button.setIcon(QtGui.QIcon(path_for("settings.png")))
 
     @abstractmethod
     def make_control_layout(self) -> QtWidgets.QLayout:
@@ -201,25 +236,12 @@ class RefSLDWidget(AbstractPlotWidget):
         control_layout.addWidget(self.plot_controls)
 
         slider_layout = QtWidgets.QVBoxLayout()
-        self.toggle_button = QtWidgets.QToolButton()
-        self.toggle_button.toggled.connect(self.toggle_settings)
-        self.toggle_button.setCheckable(True)
-        self.toggle_settings(self.toggle_button.isChecked())
         self.slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Vertical)
-        slider_layout.addWidget(self.toggle_button)
         slider_layout.addWidget(self.slider)
         slider_layout.setAlignment(self.slider, QtCore.Qt.AlignmentFlag.AlignHCenter)
         control_layout.addLayout(slider_layout)
 
         return control_layout
-
-    def toggle_settings(self, toggled_on: bool):
-        """Toggles the visibility of the plot controls"""
-        self.plot_controls.setVisible(toggled_on)
-        if toggled_on:
-            self.toggle_button.setIcon(QtGui.QIcon(path_for("hide-settings.png")))
-        else:
-            self.toggle_button.setIcon(QtGui.QIcon(path_for("settings.png")))
 
     def make_figure(self) -> Figure:
         figure = Figure()
