@@ -32,10 +32,10 @@ class PlotWidget(QtWidgets.QWidget):
         add_plot_button.setMenu(add_plot_menu)
 
         plot_types = {
-            "Corner Plot": QtWidgets.QLabel("Not yet implemented"),  # CornerPlotWidget,
-            "Posterior Plot": QtWidgets.QLabel("Not yet implemented"),  # HistPlotWidget,
+            "Corner Plot": CornerPlotWidget,
+            "Posterior Plot": HistPlotWidget,
             "Contour Plot": ContourPlotWidget,
-            "Chain Plot": QtWidgets.QLabel("Not yet implemented"),  # ChainPlotWidget,
+            "Chain Plot": ChainPlotWidget,
         }
 
         for plot_type, plot_widget in plot_types.items():
@@ -170,7 +170,6 @@ class AbstractPlotWidget(QtWidgets.QWidget):
         """
         raise NotImplementedError
 
-    @abstractmethod
     def make_figure(self) -> Figure:
         """Make the figure to plot onto.
 
@@ -181,7 +180,6 @@ class AbstractPlotWidget(QtWidgets.QWidget):
 
         """
         fig = Figure()
-        fig.subplots(1, 1)
         return fig
 
     @abstractmethod
@@ -314,9 +312,35 @@ class RefSLDWidget(AbstractPlotWidget):
 class CornerPlotWidget(AbstractPlotWidget):
     """Widget for plotting corner plots."""
 
+    def make_control_layout(self):
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(QtWidgets.QLabel("Not yet implemented!"))
+
+        return layout
+
+    def plot(self, _, results):
+        self.clear()
+        if isinstance(results, RATapi.outputs.BayesResults):
+            fig = RATapi.plotting.plot_corner(results, return_fig = True)
+            self.canvas.figure = fig
+            self.canvas.draw()
+
 
 class HistPlotWidget(AbstractPlotWidget):
     """Widget for plotting Bayesian posterior panels."""
+
+    def make_control_layout(self):
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(QtWidgets.QLabel("Not yet implemented!"))
+
+        return layout
+
+    def plot(self, _, results):
+        self.clear()
+        if isinstance(results, RATapi.outputs.BayesResults):
+            fig = RATapi.plotting.plot_hists(results, return_fig = True)
+            self.canvas.figure = fig
+            self.canvas.draw()
 
 
 class ContourPlotWidget(AbstractPlotWidget):
@@ -398,6 +422,19 @@ class ContourPlotWidget(AbstractPlotWidget):
 
         self.draw_plot()
 
+    def make_figure(self) -> Figure:
+        """Make the figure to plot onto.
+
+        Returns
+        -------
+        Figure
+            The figure to plot onto.
+
+        """
+        fig = Figure()
+        fig.subplots(1, 1)
+        return fig
+
     def draw_plot(self):
         self.clear()
         if self.current_plot_data is None:
@@ -414,3 +451,16 @@ class ContourPlotWidget(AbstractPlotWidget):
 
 class ChainPlotWidget(AbstractPlotWidget):
     """Widget for plotting a Bayesian chain panel."""
+
+    def make_control_layout(self):
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(QtWidgets.QLabel("Not yet implemented!"))
+
+        return layout
+
+    def plot(self, _, results):
+        self.clear()
+        if isinstance(results, RATapi.outputs.BayesResults):
+            fig = RATapi.plotting.plot_chain(results, return_fig = True)
+            self.canvas.figure = fig
+            self.canvas.draw()
