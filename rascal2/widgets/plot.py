@@ -119,26 +119,33 @@ class AbstractPlotWidget(QtWidgets.QWidget):
 
         main_layout = QtWidgets.QHBoxLayout()
 
-        sidebar = QtWidgets.QVBoxLayout()
+        self.tab_name_box = QtWidgets.QLineEdit()
 
+        plot_controls_layout = QtWidgets.QVBoxLayout()
+        plot_controls_layout.addWidget(self.tab_name_box)
+        plot_settings = self.make_control_layout()
+        plot_controls_layout.addLayout(plot_settings)
+
+        # self.plot_controls contains hideable controls
         self.plot_controls = QtWidgets.QWidget()
-        plot_controls_layout = self.make_control_layout()
         self.plot_controls.setLayout(plot_controls_layout)
 
-        top_tab = QtWidgets.QHBoxLayout()
-        self.tab_name_box = QtWidgets.QLineEdit()
         self.toggle_button = QtWidgets.QToolButton()
         self.toggle_button.toggled.connect(self.toggle_settings)
         self.toggle_button.setCheckable(True)
         self.toggle_settings(self.toggle_button.isChecked())
 
-        top_tab.addWidget(self.tab_name_box)
-        top_tab.addWidget(self.toggle_button)
+        # plot_toolbar contains always-visible toolbar
+        plot_toolbar = QtWidgets.QVBoxLayout()
+        plot_toolbar.addWidget(self.toggle_button)
+        for toolbar_widget in self.make_toolbar_widgets():
+            plot_toolbar.addWidget(toolbar_widget)
 
-        top_tab.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+        plot_toolbar.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop | QtCore.Qt.AlignmentFlag.AlignHCenter)
 
-        sidebar.addLayout(top_tab)
+        sidebar = QtWidgets.QHBoxLayout()
         sidebar.addWidget(self.plot_controls)
+        sidebar.addLayout(plot_toolbar)
 
         self.figure = self.make_figure()
         self.canvas = FigureCanvas(self.figure)
@@ -169,6 +176,17 @@ class AbstractPlotWidget(QtWidgets.QWidget):
 
         """
         raise NotImplementedError
+
+    def make_toolbar_widgets(self) -> list[QtWidgets.QWidget]:
+        """Make widgets for the toolbar.
+
+        Returns
+        -------
+        list[QtWidgets.QWidget]
+            A list of toolbar widgets.
+
+        """
+        return []
 
     def make_figure(self) -> Figure:
         """Make the figure to plot onto.
@@ -207,8 +225,6 @@ class RefSLDWidget(AbstractPlotWidget):
     """Creates a UI for displaying the path lengths from the simulation result"""
 
     def make_control_layout(self):
-        control_layout = QtWidgets.QHBoxLayout()
-
         self.plot_controls = QtWidgets.QWidget()
         self.x_axis = QtWidgets.QComboBox()
         self.x_axis.addItems(["Log", "Linear"])
@@ -234,17 +250,13 @@ class RefSLDWidget(AbstractPlotWidget):
         layout.addWidget(self.show_grid)
         layout.addWidget(self.show_legend)
         layout.addStretch(1)
-        self.plot_controls.setLayout(layout)
 
-        control_layout.addWidget(self.plot_controls)
+        return layout
 
-        slider_layout = QtWidgets.QVBoxLayout()
+    def make_toolbar_widgets(self) -> list[QtWidgets.QWidget]:
         self.slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Vertical)
-        slider_layout.addWidget(self.slider)
-        slider_layout.setAlignment(self.slider, QtCore.Qt.AlignmentFlag.AlignHCenter)
-        control_layout.addLayout(slider_layout)
 
-        return control_layout
+        return [self.slider]
 
     def make_figure(self) -> Figure:
         figure = Figure()
@@ -321,7 +333,7 @@ class CornerPlotWidget(AbstractPlotWidget):
     def plot(self, _, results):
         self.clear()
         if isinstance(results, RATapi.outputs.BayesResults):
-            fig = RATapi.plotting.plot_corner(results, return_fig = True)
+            fig = RATapi.plotting.plot_corner(results, return_fig=True)
             self.canvas.figure = fig
             self.canvas.draw()
 
@@ -338,7 +350,7 @@ class HistPlotWidget(AbstractPlotWidget):
     def plot(self, _, results):
         self.clear()
         if isinstance(results, RATapi.outputs.BayesResults):
-            fig = RATapi.plotting.plot_hists(results, return_fig = True)
+            fig = RATapi.plotting.plot_hists(results, return_fig=True)
             self.canvas.figure = fig
             self.canvas.draw()
 
@@ -461,6 +473,6 @@ class ChainPlotWidget(AbstractPlotWidget):
     def plot(self, _, results):
         self.clear()
         if isinstance(results, RATapi.outputs.BayesResults):
-            fig = RATapi.plotting.plot_chain(results, return_fig = True)
+            fig = RATapi.plotting.plot_chain(results, return_fig=True)
             self.canvas.figure = fig
             self.canvas.draw()
