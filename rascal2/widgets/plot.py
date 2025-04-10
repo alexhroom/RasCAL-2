@@ -53,6 +53,8 @@ class PlotWidget(QtWidgets.QWidget):
         layout.addWidget(self.plot_tabs)
 
         self.setLayout(layout)
+
+        # create reflectivity tab
         self.reflectivity_plot = RefSLDWidget(self)
         self.add_tab("Reflectivity", self.reflectivity_plot)
         # make reflectivity tab uncloseable
@@ -87,6 +89,9 @@ class PlotWidget(QtWidgets.QWidget):
         plot_widget.tab_name_box.textEdited.connect(
             lambda s: self.plot_tabs.setTabText(new_tab_index, (s or plot_type))
         )
+
+        if self.parent_model.results is not None:
+            plot_widget.plot(self.parent_model.project, self.parent_model.results)
 
     def update_plots(self):
         """Update all plots to current model results."""
@@ -362,17 +367,13 @@ class ContourPlotWidget(AbstractPlotWidget):
         """Plot the contour for two parameters."""
         fit_params = results.fitNames
 
-        old_x_param = self.x_param_box.currentText()
-        old_y_param = self.y_param_box.currentText()
-        self.x_param_box.clear()
-        self.y_param_box.clear()
-
         if not isinstance(results, RATapi.outputs.BayesResults):
             self.current_plot_data = None
         else:
             self.current_plot_data = results
 
         if self.current_plot_data is None:
+            self.clear()
             self.x_param_box.setDisabled(True)
             self.y_param_box.setDisabled(True)
             self.error_msg.setVisible(True)
@@ -381,6 +382,12 @@ class ContourPlotWidget(AbstractPlotWidget):
         self.x_param_box.setDisabled(False)
         self.y_param_box.setDisabled(False)
         self.error_msg.setVisible(False)
+
+        # reset fit parameter options
+        old_x_param = self.x_param_box.currentText()
+        old_y_param = self.y_param_box.currentText()
+        self.x_param_box.clear()
+        self.y_param_box.clear()
 
         self.x_param_box.addItems([""] + fit_params)
         if old_x_param in fit_params:
