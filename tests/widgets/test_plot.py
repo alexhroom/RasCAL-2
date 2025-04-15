@@ -4,7 +4,7 @@ import pytest
 import RATapi
 from PyQt6 import QtWidgets
 
-from rascal2.widgets.plot import ContourPlotWidget, RefSLDWidget
+from rascal2.widgets.plot import ContourPlotWidget, PlotWidget, RefSLDWidget
 
 
 class MockWindowView(QtWidgets.QMainWindow):
@@ -17,6 +17,15 @@ class MockWindowView(QtWidgets.QMainWindow):
 
 
 view = MockWindowView()
+
+
+@pytest.fixture
+def plot_widget():
+    plot_widget = PlotWidget(view)
+    plot_widget.parent_model = MagicMock()
+    plot_widget.reflectivity_plot = MagicMock()
+
+    return plot_widget
 
 
 @pytest.fixture
@@ -35,6 +44,20 @@ def contour_widget():
     return contour_widget
 
 
+def test_plot_widget_update_plots(plot_widget):
+    """Test that the plots are updated correctly when update_plots is called."""
+    plot_widget.update_plots(MagicMock(), MagicMock(spec=RATapi.outputs.Results))
+
+    assert not plot_widget.bayes_plots_button.isEnabled()
+    plot_widget.reflectivity_plot.plot.assert_called_once()
+    plot_widget.reflectivity_plot.reset_mock()
+
+    plot_widget.update_plots(MagicMock(), MagicMock(spec=RATapi.outputs.BayesResults))
+
+    assert plot_widget.bayes_plots_button.isEnabled()
+    plot_widget.reflectivity_plot.plot.assert_called_once()
+
+
 def test_ref_sld_toggle_setting(sld_widget):
     """Test that plot settings are hidden when the button is toggled."""
     assert not sld_widget.plot_controls.isVisibleTo(sld_widget)
@@ -46,7 +69,7 @@ def test_ref_sld_toggle_setting(sld_widget):
 
 @patch("RATapi.plotting.RATapi.plotting.plot_ref_sld_helper")
 def test_ref_sld_plot_event(mock_plot_sld, sld_widget):
-    """Test that plot helper recieved correct flags from UI ."""
+    """Test that plot helper recieved correct flags from UI."""
     data = RATapi.events.PlotEventData()
     data.contrastNames = ["Hello"]
 
@@ -122,30 +145,6 @@ def test_contour_plot_fit_names(mock_plot_contour, contour_widget):
 
     contour_widget.y_param_box.setCurrentText("C")
     mock_plot_contour.assert_called_once()
-
-
-def test_contour_plot_no_bayes(contour_widget):
-    """Test that the contour plot settings are only available when the results are Bayesian."""
-    normal_results = MagicMock(spec=RATapi.outputs.Results)
-    bayes_results = MagicMock(spec=RATapi.outputs.BayesResults)
-    normal_results.fitNames = []
-    bayes_results.fitNames = []
-
-    contour_widget.toggle_settings(toggled_on=True)
-
-    assert not contour_widget.x_param_box.isEnabled()
-    assert not contour_widget.y_param_box.isEnabled()
-    assert contour_widget.error_msg.isVisibleTo(contour_widget)
-
-    contour_widget.plot(None, bayes_results)
-    assert contour_widget.x_param_box.isEnabled()
-    assert contour_widget.y_param_box.isEnabled()
-    assert not contour_widget.error_msg.isVisibleTo(contour_widget)
-
-    contour_widget.plot(None, normal_results)
-    assert not contour_widget.x_param_box.isEnabled()
-    assert not contour_widget.y_param_box.isEnabled()
-    assert contour_widget.error_msg.isVisibleTo(contour_widget)
 
 
 def test_contour_plot_fitnames(contour_widget):

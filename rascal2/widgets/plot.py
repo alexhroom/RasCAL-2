@@ -1,7 +1,6 @@
 """The Plot MDI widget."""
 
 from abc import abstractmethod
-from functools import partial
 from inspect import isclass
 from typing import Optional, Union
 
@@ -14,58 +13,77 @@ from rascal2.config import path_for
 
 
 class PlotWidget(QtWidgets.QWidget):
-    """The MDI widget for plotting."""
+    """The MDI plot widget."""
 
     def __init__(self, parent):
         super().__init__(parent)
 
         self.parent_model = parent.presenter.model
-        self.parent_model.results_updated.connect(lambda: self.update_plots())
+        self.parent_model.results_updated.connect(
+            lambda: self.update_plots(self.parent_model.project, self.parent_model.results)
+        )
 
         layout = QtWidgets.QVBoxLayout()
 
-        menu_layout = QtWidgets.QHBoxLayout()
-        menu_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
+        self.bayes_plots_dialog = BayesPlotsDialog(self)
 
-        add_plot_button = QtWidgets.QPushButton("Add Plot...")
-        add_plot_menu = QtWidgets.QMenu()
-        add_plot_button.setMenu(add_plot_menu)
+        button_layout = QtWidgets.QHBoxLayout()
+        self.bayes_plots_button = QtWidgets.QPushButton("View Bayes plots...")
+        self.bayes_plots_button.setDisabled(True)
+        self.bayes_plots_button.pressed.connect(self.bayes_plots_dialog.exec)
 
-        plot_types = {
-            "Corner Plot": CornerPlotWidget,
-            "Posterior Plot": HistPlotWidget,
-            "Contour Plot": ContourPlotWidget,
-            "Chain Plot": ChainPlotWidget,
-        }
+        button_layout.addWidget(self.bayes_plots_button)
+        button_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
+        self.reflectivity_plot = RefSLDWidget(self)
+        layout.addLayout(button_layout)
+        layout.addWidget(self.reflectivity_plot)
 
-        for plot_type, plot_widget in plot_types.items():
-            action = QtGui.QAction(plot_type, self)
-            action.triggered.connect(partial(self.add_tab, plot_type=plot_type, plot_widget=plot_widget))
-            add_plot_menu.addAction(action)
+        self.setLayout(layout)
 
-        menu_layout.addWidget(add_plot_button)
-        layout.addLayout(menu_layout)
+    def update_plots(self, project: RATapi.Project, results: RATapi.outputs.Results | RATapi.outputs.BayesResults):
+        """Update the plot widget to match the parent model."""
+        self.reflectivity_plot.plot(project, results)
+        self.bayes_plots_dialog.results_outdated = True
+        self.bayes_plots_button.setDisabled(not isinstance(results, RATapi.outputs.BayesResults))
+
+    def plot_event(self, event):
+        """Handle plot event data."""
+        self.reflectivity_plot.plot_event(event)
+
+    def clear(self):
+        """Clear the Ref/SLD canvas."""
+        self.reflectivity_plot.clear()
+
+
+class BayesPlotsDialog(QtWidgets.QDialog):
+    """The modal dialog for the Bayes plots."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent_model = parent.parent_model
+
+        layout = QtWidgets.QVBoxLayout()
 
         self.plot_tabs = QtWidgets.QTabWidget()
-        self.plot_tabs.setTabsClosable(True)
-        self.plot_tabs.tabCloseRequested.connect(lambda index: self.plot_tabs.removeTab(index) if index != 0 else None)
+
+        # store bool for whether plots represent the current results object
+        self.results_outdated = True
+
+        plots = {
+            "Corner Plot": CornerPlotWidget,
+            "Contour Plots": ContourPlotWidget,
+            "Posteriors": HistPlotWidget,
+            "Diagnostics": ChainPlotWidget,
+        }
+
+        for plot_type, plot_widget in plots.items():
+            self.add_tab(plot_type, plot_widget)
 
         layout.addWidget(self.plot_tabs)
 
         self.setLayout(layout)
 
-        # create reflectivity tab
-        self.reflectivity_plot = RefSLDWidget(self)
-        self.add_tab("Reflectivity", self.reflectivity_plot)
-        # make reflectivity tab uncloseable
-        # close button is apparently on left side on mac and right side on windows/linux...
-        # so make both unclickable to be safe
-        r_button = self.plot_tabs.tabBar().tabButton(0, QtWidgets.QTabBar.ButtonPosition.RightSide)
-        l_button = self.plot_tabs.tabBar().tabButton(0, QtWidgets.QTabBar.ButtonPosition.LeftSide)
-        if r_button is not None:
-            r_button.resize(0, 0)
-        if l_button is not None:
-            l_button.resize(0, 0)
+        self.setModal(True)
 
     def add_tab(self, plot_type: str, plot_widget: "AbstractPlotWidget"):
         """Add a widget as a tab to the plot widget.
@@ -83,29 +101,19 @@ class PlotWidget(QtWidgets.QWidget):
         if isclass(plot_widget):
             plot_widget = plot_widget(self)
 
-        new_tab_index = self.plot_tabs.count()
         self.plot_tabs.addTab(plot_widget, plot_type)
-        plot_widget.tab_name_box.setText(plot_type)
-        plot_widget.tab_name_box.textEdited.connect(
-            lambda s: self.plot_tabs.setTabText(new_tab_index, (s or plot_type))
-        )
 
         if self.parent_model.results is not None:
             plot_widget.plot(self.parent_model.project, self.parent_model.results)
 
-    def update_plots(self):
-        """Update all plots to current model results."""
-        for i in range(0, self.plot_tabs.count()):
-            self.plot_tabs.widget(i).plot(self.parent_model.project, self.parent_model.results)
+    def exec(self):
+        """Update plots if needed and execute the dialog."""
+        if self.results_outdated:
+            for index in range(0, self.plot_tabs.count()):
+                self.plot_tabs.widget(index).plot(self.parent_model.project, self.parent_model.results)
+            self.results_outdated = False
 
-    def plot_event(self, event):
-        """Handle plot event data."""
-        self.reflectivity_plot.plot_event(event)
-
-    def clear(self):
-        """Clear all canvases."""
-        for i in range(0, self.plot_tabs.count()):
-            self.plot_tabs.widget(i).clear()
+        super().exec()
 
 
 class AbstractPlotWidget(QtWidgets.QWidget):
@@ -119,16 +127,10 @@ class AbstractPlotWidget(QtWidgets.QWidget):
 
         main_layout = QtWidgets.QHBoxLayout()
 
-        self.tab_name_box = QtWidgets.QLineEdit()
-
-        plot_controls_layout = QtWidgets.QVBoxLayout()
-        plot_controls_layout.addWidget(self.tab_name_box)
         plot_settings = self.make_control_layout()
-        plot_controls_layout.addLayout(plot_settings)
-
         # self.plot_controls contains hideable controls
         self.plot_controls = QtWidgets.QWidget()
-        self.plot_controls.setLayout(plot_controls_layout)
+        self.plot_controls.setLayout(plot_settings)
 
         self.toggle_button = QtWidgets.QToolButton()
         self.toggle_button.toggled.connect(self.toggle_settings)
@@ -159,7 +161,6 @@ class AbstractPlotWidget(QtWidgets.QWidget):
     def toggle_settings(self, toggled_on: bool):
         """Toggles the visibility of the plot controls"""
         self.plot_controls.setVisible(toggled_on)
-        self.tab_name_box.setVisible(toggled_on)
         if toggled_on:
             self.toggle_button.setIcon(QtGui.QIcon(path_for("hide-settings.png")))
         else:
@@ -385,13 +386,10 @@ class ContourPlotWidget(AbstractPlotWidget):
         smooth_row.addWidget(QtWidgets.QLabel("Smooth contour:"))
         smooth_row.addWidget(self.smooth_checkbox)
 
-        self.error_msg = QtWidgets.QLabel("Contour plots are only available\nfor Bayesian calculations.")
-
         control_layout.addLayout(x_param_row)
         control_layout.addLayout(y_param_row)
         control_layout.addLayout(smooth_row)
         control_layout.addStretch()
-        control_layout.addWidget(self.error_msg)
 
         return control_layout
 
@@ -408,12 +406,10 @@ class ContourPlotWidget(AbstractPlotWidget):
             self.clear()
             self.x_param_box.setDisabled(True)
             self.y_param_box.setDisabled(True)
-            self.error_msg.setVisible(True)
             return
 
         self.x_param_box.setDisabled(False)
         self.y_param_box.setDisabled(False)
-        self.error_msg.setVisible(False)
 
         # reset fit parameter options
         old_x_param = self.x_param_box.currentText()
