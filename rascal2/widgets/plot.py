@@ -128,6 +128,13 @@ class AbstractPlotWidget(QtWidgets.QWidget):
         main_layout = QtWidgets.QHBoxLayout()
 
         plot_settings = self.make_control_layout()
+
+        export_button = QtWidgets.QPushButton("Export plot...")
+        export_button.pressed.connect(self.export)
+
+        plot_settings.addStretch(1)
+        plot_settings.addWidget(export_button)
+
         # self.plot_controls contains hideable controls
         self.plot_controls = QtWidgets.QWidget()
         self.plot_controls.setLayout(plot_settings)
@@ -221,6 +228,12 @@ class AbstractPlotWidget(QtWidgets.QWidget):
             axis.clear()
         self.canvas.draw()
 
+    def export(self):
+        """Save the figure to a file."""
+        filepath = QtWidgets.QFileDialog.getSaveFileName(self, "Export Plot")
+        if filepath:
+            self.figure.savefig(filepath[0])
+
 
 class RefSLDWidget(AbstractPlotWidget):
     """Creates a UI for displaying the path lengths from the simulation result"""
@@ -250,7 +263,6 @@ class RefSLDWidget(AbstractPlotWidget):
         layout.addWidget(self.show_error_bar)
         layout.addWidget(self.show_grid)
         layout.addWidget(self.show_legend)
-        layout.addStretch(1)
 
         return layout
 
@@ -389,7 +401,6 @@ class ContourPlotWidget(AbstractPlotWidget):
         control_layout.addLayout(x_param_row)
         control_layout.addLayout(y_param_row)
         control_layout.addLayout(smooth_row)
-        control_layout.addStretch()
 
         return control_layout
 
