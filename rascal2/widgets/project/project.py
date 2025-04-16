@@ -445,6 +445,8 @@ class ProjectWidget(QtWidgets.QWidget):
                     else:
                         model_field_name = "layers"
                     valid_params = [p.name for p in project[model_field_name]]
+                    # strip out empty items
+                    model = [item for item in model if item != ""]
                     invalid_model_vals = [item for item in model if item not in valid_params]
                     # this is the fastest way to get all unique items from a list without changing the order...
                     invalid_model_vals = list(dict.fromkeys(invalid_model_vals))
@@ -455,7 +457,10 @@ class ProjectWidget(QtWidgets.QWidget):
                         )
                         yield msg
                 else:
-                    if model[0] not in [f.name for f in project["custom_files"]]:
+                    if not model:
+                        msg = f"Contrast '{contrast.name}' (row {i + 1}) has no model set"
+                        yield msg
+                    elif model[0] not in [f.name for f in project["custom_files"]]:
                         msg = f"Contrast '{contrast.name}' (row {i + 1}) has invalid model: {model[0]}"
                         yield msg
 

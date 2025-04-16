@@ -86,6 +86,8 @@ class ClassListItemModel(QtCore.QAbstractListModel, Generic[T]):
             The row containing the item to delete.
 
         """
+        if len(self.classlist) == 0:
+            return
         self.classlist.pop(row)
         self.endResetModel()
 
