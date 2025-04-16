@@ -11,7 +11,7 @@ from RATapi.utils.enums import Calculations, Geometries, LayerModels
 
 from rascal2.config import path_for
 from rascal2.widgets.project.lists import ContrastWidget
-from rascal2.widgets.project.models import (
+from rascal2.widgets.project.tables import (
     CustomFileWidget,
     DomainContrastWidget,
     LayerFieldWidget,

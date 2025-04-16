@@ -6,13 +6,13 @@ import RATapi
 from PyQt6 import QtCore, QtWidgets
 from RATapi.utils.enums import Calculations, Geometries, LayerModels
 
-from rascal2.widgets.project.models import (
+from rascal2.widgets.project.project import ProjectTabWidget, ProjectWidget, create_draft_project
+from rascal2.widgets.project.tables import (
     ClassListTableModel,
     ParameterFieldWidget,
     ParametersModel,
     ProjectFieldWidget,
 )
-from rascal2.widgets.project.project import ProjectTabWidget, ProjectWidget, create_draft_project
 
 
 class MockModel(QtCore.QObject):

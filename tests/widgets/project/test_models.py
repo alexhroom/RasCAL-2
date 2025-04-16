@@ -10,7 +10,7 @@ from RATapi.utils.enums import Languages
 
 import rascal2.widgets.delegates as delegates
 import rascal2.widgets.inputs as inputs
-from rascal2.widgets.project.models import (
+from rascal2.widgets.project.tables import (
     ClassListTableModel,
     CustomFileModel,
     CustomFileWidget,
