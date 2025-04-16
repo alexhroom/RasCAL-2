@@ -304,6 +304,7 @@ class StandardLayerModelWidget(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout()
         layout.addWidget(self.layer_list)
         layout.addLayout(buttons)
+        layout.setContentsMargins(0, 0, 0, 0)
 
         self.setLayout(layout)
 
@@ -452,52 +453,44 @@ class ContrastWidget(AbstractProjectListWidget):
             The resulting widget for the item.
 
         """
-        top_grid = QtWidgets.QGridLayout()
-        top_grid.addWidget(QtWidgets.QLabel("Contrast Name:"), 0, 0)
-        top_grid.addWidget(data_widget("name"), 0, 1, 1, -1)
+        grid = QtWidgets.QGridLayout()
+        grid.addWidget(QtWidgets.QLabel("Contrast Name:"), 0, 0)
+        grid.addWidget(data_widget("name"), 0, 1, 1, -1)
 
-        top_grid.addWidget(QtWidgets.QLabel("Background:"), 1, 0)
-        top_grid.addWidget(data_widget("background"), 1, 1, 1, 2)
-        top_grid.addWidget(QtWidgets.QLabel("Background Action:"), 1, 3)
-        top_grid.addWidget(data_widget("background_action"), 1, 4, 1, 2)
+        grid.addWidget(QtWidgets.QLabel("Background:"), 1, 0)
+        grid.addWidget(data_widget("background"), 1, 1, 1, 2)
+        grid.addWidget(QtWidgets.QLabel("Background Action:"), 1, 3)
+        grid.addWidget(data_widget("background_action"), 1, 4, 1, 2)
 
-        top_grid.addWidget(QtWidgets.QLabel("Resolution:"), 2, 0)
-        top_grid.addWidget(data_widget("resolution"), 2, 1)
-        top_grid.addWidget(QtWidgets.QLabel("Scalefactor:"), 2, 2)
-        top_grid.addWidget(data_widget("scalefactor"), 2, 3)
-        top_grid.addWidget(QtWidgets.QLabel("Data:"), 2, 4)
-        top_grid.addWidget(data_widget("data"), 2, 5)
+        grid.addWidget(QtWidgets.QLabel("Resolution:"), 2, 0)
+        grid.addWidget(data_widget("resolution"), 2, 1)
+        grid.addWidget(QtWidgets.QLabel("Scalefactor:"), 2, 2)
+        grid.addWidget(data_widget("scalefactor"), 2, 3)
+        grid.addWidget(QtWidgets.QLabel("Data:"), 2, 4)
+        grid.addWidget(data_widget("data"), 2, 5)
         if self.model.domains:
-            top_grid.addWidget(QtWidgets.QLabel("Domain Ratio:"), 3, 0)
-            top_grid.addWidget(data_widget("domain_ratio"), 3, 1, 1, -1)
+            grid.addWidget(QtWidgets.QLabel("Domain Ratio:"), 3, 0)
+            grid.addWidget(data_widget("domain_ratio"), 3, 1, 1, -1)
 
-        top_grid.setVerticalSpacing(10)
+        grid.setVerticalSpacing(10)
 
-        settings_row = QtWidgets.QHBoxLayout()
-        settings_row.addWidget(QtWidgets.QLabel("Use resampling:"))
         resampling_checkbox = QtWidgets.QCheckBox()
         resampling_checkbox.setChecked(self.model.get_item(i).resample)
         resampling_checkbox.checkStateChanged.connect(
             lambda s: self.model.set_data(i, "resample", (s == QtCore.Qt.CheckState.Checked))
         )
-        settings_row.addWidget(resampling_checkbox)
-        settings_row.addStretch()
 
-        model_grid = QtWidgets.QGridLayout()
-        model_grid.addWidget(QtWidgets.QLabel("Bulk in:"), 0, 0)
-        model_grid.addWidget(data_widget("bulk_in"), 0, 1)
-        model_grid.addWidget(QtWidgets.QLabel("Model:"), 1, 0)
-        model_grid.addWidget(data_widget("model"), 1, 1)
-        model_grid.addWidget(QtWidgets.QLabel("Bulk out:"), 2, 0)
-        model_grid.addWidget(data_widget("bulk_out"), 2, 1)
-
-        layout = QtWidgets.QVBoxLayout()
-        layout.addLayout(top_grid)
-        layout.addLayout(settings_row)
-        layout.addLayout(model_grid)
+        grid.addWidget(QtWidgets.QLabel("Use resampling:"), 4, 0)
+        grid.addWidget(resampling_checkbox, 4, 1)
+        grid.addWidget(QtWidgets.QLabel("Bulk in:"), 5, 0)
+        grid.addWidget(data_widget("bulk_in"), 5, 1, 1, -1)
+        grid.addWidget(QtWidgets.QLabel("Model:"), 6, 0)
+        grid.addWidget(data_widget("model"), 6, 1, 1, -1)
+        grid.addWidget(QtWidgets.QLabel("Bulk out:"), 7, 0)
+        grid.addWidget(data_widget("bulk_out"), 7, 1, 1, -1)
 
         widget = QtWidgets.QWidget(self)
-        widget.setLayout(layout)
+        widget.setLayout(grid)
 
         return widget
 

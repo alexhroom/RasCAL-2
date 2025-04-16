@@ -124,7 +124,7 @@ class ProjectFieldDelegate(QtWidgets.QStyledItemDelegate):
 
     def createEditor(self, parent, option, index):
         widget = QtWidgets.QComboBox(parent)
-        parameters = self.project_widget.draft_project["parameters"]
+        parameters = self.project_widget.draft_project[self.field]
         names = [p.name for p in parameters]
         if self.blank_option:
             names = [""] + names
